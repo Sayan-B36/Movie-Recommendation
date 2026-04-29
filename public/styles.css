@@ -764,6 +764,7 @@ h1 {
   overflow: hidden;
   color: var(--text);
   display: -webkit-box;
+  line-clamp: 2;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   font-size: 1rem;
@@ -1166,6 +1167,7 @@ h1 {
   overflow: hidden;
   color: #eee8e1;
   display: -webkit-box;
+  line-clamp: 2;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   font-size: 0.78rem;
