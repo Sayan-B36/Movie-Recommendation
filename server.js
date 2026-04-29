@@ -97,6 +97,46 @@ app.get("/api/discover/:mediaType", async (req, res) => {
   }
 });
 
+app.get("/api/search", async (req, res) => {
+  const query = (req.query.q || "").toString().trim();
+  if (!query) return res.json({ results: [] });
+  try {
+    const data = await tmdbGet(
+      "/search/multi",
+      {
+        query,
+        include_adult: "false",
+        page: 1
+      },
+      1000 * 60 * 10
+    );
+    const results = (data.results || [])
+      .filter((item) => item.media_type === "movie" || item.media_type === "tv")
+      .filter((item) => item.poster_path || item.backdrop_path)
+      .slice(0, 12);
+    res.json({ results });
+  } catch (error) {
+    res.status(error.status || 500).json({ error: error.message });
+  }
+});
+
+app.get("/api/recommendations/:mediaType/:id", async (req, res) => {
+  const { mediaType, id } = req.params;
+  if (mediaType !== "movie" && mediaType !== "tv") {
+    return res.status(400).json({ error: "mediaType must be 'movie' or 'tv'." });
+  }
+  try {
+    const data = await tmdbGet(
+      `/${mediaType}/${encodeURIComponent(id)}/recommendations`,
+      { page: 1 },
+      DETAIL_TTL
+    );
+    res.json(data);
+  } catch (error) {
+    res.status(error.status || 500).json({ error: error.message });
+  }
+});
+
 app.get("/api/details/:mediaType/:id", async (req, res) => {
   const { mediaType, id } = req.params;
   if (mediaType !== "movie" && mediaType !== "tv") {

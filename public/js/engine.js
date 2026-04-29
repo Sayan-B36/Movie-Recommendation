@@ -1,4 +1,10 @@
-import { discoverMedia, getMediaDetails, getOmdbTitle } from "./api.js";
+import {
+  discoverMedia,
+  getMediaDetails,
+  getOmdbTitle,
+  getRecommendations,
+  searchTitles
+} from "./api.js";
 import { RESULT_LIMITS } from "./data.js";
 import {
   buildPreferenceProfile,
@@ -73,7 +79,7 @@ async function enrichItem(item, filters) {
       omdb?.imdbRating && omdb.imdbRating !== "N/A" ? omdb.imdbRating : null;
     const dub = inferDubStatus({ ...item, detail }, filters.dubLanguage);
     const enrichedScore =
-      item.matchScore +
+      (item.matchScore || 0) +
       (dub.available ? 8 : 0) +
       (platforms.length ? 4 : 0) +
       (Number(imdbRating) ? Number(imdbRating) * 2 : 0);
@@ -122,4 +128,68 @@ export async function fetchRecommendations(filters) {
     .filter((item) => isSelectedPlatformAvailable(item, filters.platform))
     .sort((a, b) => b.matchScore - a.matchScore)
     .slice(0, RESULT_LIMITS.final);
+}
+
+/**
+ * Search by title, then return [seedTitle, ...similarTitles] enriched with
+ * platforms / IMDb ratings so the user can play the trailer and see where
+ * it streams. Falls back from /recommendations to /similar if needed.
+ */
+export async function searchByTitle(query, filters) {
+  const q = (query || "").trim();
+  if (!q) return { seed: null, results: [] };
+
+  const { results: matches } = await searchTitles(q);
+  if (!matches.length) return { seed: null, results: [] };
+
+  const seedRaw = matches[0];
+  const mediaType = seedRaw.media_type;
+  const seed = normalizeResult(seedRaw, mediaType);
+
+  let similarBasic = [];
+  try {
+    const recs = await getRecommendations(mediaType, seed.id);
+    similarBasic = recs.results || [];
+  } catch {
+    similarBasic = [];
+  }
+
+  // If TMDB recs are weak, fall back to /details.similar
+  if (similarBasic.length < 6) {
+    try {
+      const det = await getMediaDetails(mediaType, seed.id);
+      const fromDetail = det?.similar?.results || [];
+      const seen = new Set(similarBasic.map((s) => s.id));
+      fromDetail.forEach((s) => {
+        if (!seen.has(s.id)) {
+          similarBasic.push(s);
+          seen.add(s.id);
+        }
+      });
+    } catch {
+      /* ignore */
+    }
+  }
+
+  const candidates = [seed, ...similarBasic.map((s) => normalizeResult(s, mediaType))]
+    .filter((item) => item.poster_path || item.backdrop_path)
+    .slice(0, RESULT_LIMITS.preEnrichment);
+
+  // De-dupe just in case
+  const seen = new Set();
+  const unique = candidates.filter((item) => {
+    const k = `${item.media_type}-${item.id}`;
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+
+  const enriched = await Promise.all(unique.map((item) => enrichItem(item, filters)));
+
+  // Keep the seed pinned at index 0; rank the rest by enriched score.
+  const [seedEnriched, ...rest] = enriched;
+  const ranked = rest.sort((a, b) => (b.matchScore || 0) - (a.matchScore || 0));
+
+  const final = [seedEnriched, ...ranked].slice(0, RESULT_LIMITS.final);
+  return { seed: seedEnriched, results: final };
 }

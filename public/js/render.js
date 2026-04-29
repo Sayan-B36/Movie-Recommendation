@@ -273,14 +273,23 @@ function attachCardTilt(area) {
   });
 }
 
-export function renderResults({ loading, results, hasSearched, onSelect }) {
+export function renderResults({ loading, results, hasSearched, onSelect, mode, searchQuery, searchSeed }) {
   const heading = document.getElementById("results-heading");
+  const eyebrow = document.querySelector(".results-section .eyebrow");
   const area = document.getElementById("results-area");
   if (loading) {
-    heading.textContent = "Curating titles";
+    if (eyebrow) eyebrow.textContent = mode === "search" ? "Searching" : "Your watchlist";
+    heading.textContent = mode === "search" ? `Finding titles like "${searchQuery || ""}"` : "Curating titles";
   } else if (results.length) {
-    heading.textContent = `${results.length} matches`;
+    if (mode === "search" && searchSeed) {
+      if (eyebrow) eyebrow.textContent = "Similar titles";
+      heading.textContent = `More like ${getTitle(searchSeed)}`;
+    } else {
+      if (eyebrow) eyebrow.textContent = "Your watchlist";
+      heading.textContent = `${results.length} matches`;
+    }
   } else {
+    if (eyebrow) eyebrow.textContent = "Your watchlist";
     heading.textContent = "Ready when you are";
   }
 

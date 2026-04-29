@@ -22,6 +22,31 @@
         <span>MoodFlix</span>
       </div>
       <div class="topbar-actions">
+        <form id="search-form" class="search-form" role="search" autocomplete="off">
+          <span class="search-icon" data-icon="Search" data-size="16"></span>
+          <input
+            id="search-input"
+            class="search-input"
+            type="search"
+            name="q"
+            placeholder="Search a movie or series..."
+            aria-label="Search a movie or series"
+          />
+          <button
+            id="search-clear"
+            class="search-clear"
+            type="button"
+            aria-label="Clear search"
+            hidden
+          >
+            <span data-icon="X" data-size="14"></span>
+          </button>
+          <button id="search-submit" class="search-submit" type="submit">
+            <span data-icon="Search" data-size="14"></span>
+            Find similar
+          </button>
+          <div id="search-suggestions" class="search-suggestions" role="listbox" hidden></div>
+        </form>
         <span id="api-pill" class="api-pill">
           <span data-icon="KeyRound" data-size="16"></span>
           <span id="api-pill-text">Connecting...</span>

@@ -28,6 +28,30 @@ export async function getMediaDetails(mediaType, id) {
   return r.json();
 }
 
+export async function searchTitles(query) {
+  const q = (query || "").trim();
+  if (!q) return { results: [] };
+  const url = new URL("/api/search", window.location.origin);
+  url.searchParams.set("q", q);
+  const r = await fetch(url);
+  if (!r.ok) {
+    const data = await r.json().catch(() => ({}));
+    throw new Error(data.error || `Search failed (${r.status}).`);
+  }
+  return r.json();
+}
+
+export async function getRecommendations(mediaType, id) {
+  const r = await fetch(
+    `/api/recommendations/${mediaType}/${encodeURIComponent(id)}`
+  );
+  if (!r.ok) {
+    const data = await r.json().catch(() => ({}));
+    throw new Error(data.error || `Recommendations failed (${r.status}).`);
+  }
+  return r.json();
+}
+
 export async function getOmdbTitle(imdbId) {
   if (!imdbId) return null;
   const url = new URL("/api/omdb", window.location.origin);

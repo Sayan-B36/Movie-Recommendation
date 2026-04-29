@@ -6,7 +6,10 @@ export const state = {
   loading: false,
   hasSearched: false,
   results: [],
-  error: ""
+  error: "",
+  mode: "mood", // 'mood' | 'search'
+  searchQuery: "",
+  searchSeed: null
 };
 
 export function setFilter(name, value) {
