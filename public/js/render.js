@@ -224,6 +224,9 @@ function skeletonGridHtml() {
 function movieCardHtml(item) {
   const poster = imageUrl(item.poster_path || item.detail?.poster_path, "w500");
   const platforms = item.platforms?.slice(0, 3) || [];
+  const collectionBadge = item.isCollectionPart && item.collectionName
+    ? `<span class="collection-badge" title="${escapeHtml(item.collectionName)}">${iconHtml("Layers", 12)} Part of ${escapeHtml(item.collectionName)}</span>`
+    : "";
   return `
     <button class="movie-card" type="button" data-card-id="${escapeHtml(`${item.media_type}-${item.id}`)}">
       <div class="poster-wrap">
@@ -234,6 +237,7 @@ function movieCardHtml(item) {
         }
         <span class="media-badge">${escapeHtml(getMediaLabel(item.media_type))}</span>
         <span class="dub-badge ${item.dub?.available ? "yes" : ""}">${escapeHtml(item.dub?.label || "Dub unknown")}</span>
+        ${collectionBadge}
       </div>
       <div class="card-body">
         <h3>${escapeHtml(getTitle(item))}</h3>

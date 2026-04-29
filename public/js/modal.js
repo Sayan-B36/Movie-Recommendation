@@ -49,6 +49,16 @@ export function openDetailModal({ item, filters, onSelectSimilar }) {
     .join(", ");
   const similar = item.detail?.similar?.results?.slice(0, 6) || [];
 
+  // Filter out "Specials" (season_number === 0) and seasons with 0 episodes.
+  const seasons =
+    item.media_type === "tv"
+      ? (item.detail?.seasons || [])
+          .filter((s) => s.season_number > 0 && (s.episode_count || 0) > 0)
+          .sort((a, b) => a.season_number - b.season_number)
+      : [];
+
+  const totalEpisodes = seasons.reduce((acc, s) => acc + (s.episode_count || 0), 0);
+
   const heroStyle = backdrop ? `style="--detail-backdrop: url(${backdrop})"` : "";
 
   const html = `
@@ -138,6 +148,46 @@ export function openDetailModal({ item, filters, onSelectSimilar }) {
             }
           </div>
         </section>
+
+        ${
+          seasons.length
+            ? `<section class="seasons-section">
+              <div class="section-minihead">
+                ${iconHtml("ListVideo", 16)} ${seasons.length} season${seasons.length > 1 ? "s" : ""} / ${totalEpisodes} episodes total
+              </div>
+              <div class="seasons-grid">
+                ${seasons
+                  .map((s) => {
+                    const sPoster = s.poster_path ? imageUrl(s.poster_path, "w342") : "";
+                    const sYear = (s.air_date || "").slice(0, 4);
+                    const sName =
+                      s.name && !/^Season\s*\d+$/i.test(s.name)
+                        ? s.name
+                        : `Season ${s.season_number}`;
+                    return `
+                  <div class="season-card">
+                    <div class="season-poster">
+                      ${
+                        sPoster
+                          ? `<img src="${sPoster}" alt="${escapeHtml(sName)} poster" loading="lazy" />`
+                          : `<span class="season-poster-fallback">S${s.season_number}</span>`
+                      }
+                      <span class="season-num-badge">S${s.season_number}</span>
+                    </div>
+                    <div class="season-meta">
+                      <strong>${escapeHtml(sName)}</strong>
+                      <span class="season-stats">
+                        ${iconHtml("Tv", 12)} ${s.episode_count} episode${s.episode_count > 1 ? "s" : ""}
+                        ${sYear ? ` / ${escapeHtml(sYear)}` : ""}
+                      </span>
+                    </div>
+                  </div>`;
+                  })
+                  .join("")}
+              </div>
+            </section>`
+            : ""
+        }
 
         ${
           similar.length

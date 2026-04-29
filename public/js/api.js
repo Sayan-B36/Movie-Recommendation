@@ -41,6 +41,13 @@ export async function searchTitles(query) {
   return r.json();
 }
 
+export async function getCollection(collectionId) {
+  if (!collectionId) return null;
+  const r = await fetch(`/api/collection/${encodeURIComponent(collectionId)}`);
+  if (!r.ok) return null;
+  return r.json();
+}
+
 export async function getRecommendations(mediaType, id) {
   const r = await fetch(
     `/api/recommendations/${mediaType}/${encodeURIComponent(id)}`

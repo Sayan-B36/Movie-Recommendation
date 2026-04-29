@@ -1,5 +1,6 @@
 import {
   discoverMedia,
+  getCollection,
   getMediaDetails,
   getOmdbTitle,
   getRecommendations,
@@ -146,6 +147,30 @@ export async function searchByTitle(query, filters) {
   const mediaType = seedRaw.media_type;
   const seed = normalizeResult(seedRaw, mediaType);
 
+  // Fetch seed details up-front so we can detect movie collections
+  // (e.g. "My Fault" -> Culpa Mia trilogy) and grab seasons for TV.
+  let seedDetail = null;
+  try {
+    seedDetail = await getMediaDetails(mediaType, seed.id);
+  } catch {
+    seedDetail = null;
+  }
+
+  // 1) Collection parts (movies in the same franchise).
+  let collectionParts = [];
+  let collection = null;
+  if (mediaType === "movie" && seedDetail?.belongs_to_collection?.id) {
+    try {
+      collection = await getCollection(seedDetail.belongs_to_collection.id);
+      collectionParts = (collection?.parts || [])
+        .filter((p) => p.id !== seed.id)
+        .map((p) => normalizeResult(p, "movie"));
+    } catch {
+      /* ignore */
+    }
+  }
+
+  // 2) TMDB /recommendations
   let similarBasic = [];
   try {
     const recs = await getRecommendations(mediaType, seed.id);
@@ -154,28 +179,40 @@ export async function searchByTitle(query, filters) {
     similarBasic = [];
   }
 
-  // If TMDB recs are weak, fall back to /details.similar
-  if (similarBasic.length < 6) {
-    try {
-      const det = await getMediaDetails(mediaType, seed.id);
-      const fromDetail = det?.similar?.results || [];
-      const seen = new Set(similarBasic.map((s) => s.id));
-      fromDetail.forEach((s) => {
-        if (!seen.has(s.id)) {
-          similarBasic.push(s);
-          seen.add(s.id);
-        }
-      });
-    } catch {
-      /* ignore */
-    }
+  // 3) Fallback to /details.similar if recs are weak
+  if (similarBasic.length < 6 && seedDetail?.similar?.results) {
+    const seenIds = new Set(similarBasic.map((s) => s.id));
+    seedDetail.similar.results.forEach((s) => {
+      if (!seenIds.has(s.id)) {
+        similarBasic.push(s);
+        seenIds.add(s.id);
+      }
+    });
   }
 
-  const candidates = [seed, ...similarBasic.map((s) => normalizeResult(s, mediaType))]
+  // Compose candidates: [seed, ...collectionParts, ...similar]
+  // Collection parts are tagged so the UI can label them.
+  const taggedCollectionParts = collectionParts.map((p) => ({
+    ...p,
+    isCollectionPart: true,
+    collectionName: collection?.name || seedDetail?.belongs_to_collection?.name || ""
+  }));
+
+  const similarNormalized = similarBasic.map((s) => normalizeResult(s, mediaType));
+
+  const seedTagged = collection
+    ? {
+        ...seed,
+        isCollectionPart: true,
+        collectionName: collection?.name || seedDetail?.belongs_to_collection?.name || ""
+      }
+    : seed;
+
+  const candidates = [seedTagged, ...taggedCollectionParts, ...similarNormalized]
     .filter((item) => item.poster_path || item.backdrop_path)
     .slice(0, RESULT_LIMITS.preEnrichment);
 
-  // De-dupe just in case
+  // De-dupe (seed could appear inside similarBasic occasionally)
   const seen = new Set();
   const unique = candidates.filter((item) => {
     const k = `${item.media_type}-${item.id}`;
@@ -186,10 +223,25 @@ export async function searchByTitle(query, filters) {
 
   const enriched = await Promise.all(unique.map((item) => enrichItem(item, filters)));
 
-  // Keep the seed pinned at index 0; rank the rest by enriched score.
-  const [seedEnriched, ...rest] = enriched;
-  const ranked = rest.sort((a, b) => (b.matchScore || 0) - (a.matchScore || 0));
+  // Pin seed first. Then collection parts (sorted by release date asc -
+  // part 1, part 2, part 3...), then similar by score.
+  const seedEnriched = enriched[0];
+  const collectionEnriched = enriched
+    .slice(1)
+    .filter((it) => it.isCollectionPart)
+    .sort((a, b) => {
+      const ay = Number((a.release_date || "0").slice(0, 4)) || 0;
+      const by = Number((b.release_date || "0").slice(0, 4)) || 0;
+      return ay - by;
+    });
+  const similarEnriched = enriched
+    .slice(1)
+    .filter((it) => !it.isCollectionPart)
+    .sort((a, b) => (b.matchScore || 0) - (a.matchScore || 0));
 
-  const final = [seedEnriched, ...ranked].slice(0, RESULT_LIMITS.final);
-  return { seed: seedEnriched, results: final };
+  const final = [seedEnriched, ...collectionEnriched, ...similarEnriched].slice(
+    0,
+    RESULT_LIMITS.final
+  );
+  return { seed: seedEnriched, results: final, collection };
 }
