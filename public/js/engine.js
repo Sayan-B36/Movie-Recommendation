@@ -251,14 +251,23 @@ export async function searchByTitle(query, filters) {
 /* ==========================================================================
  * Endless scrolling helpers
  * ==========================================================================
- * Both functions return additional enriched items to append after the
- * initial result set. They dedupe against `existingIds` so the UI never
- * shows the same title twice. An empty array signals "no more pages".
+ * Both helpers append more enriched items beyond the initial set. They
+ * enforce relevance gates so the user never sees padding:
+ *   - Filter mode: items must clear the user's minRating + a vote-count
+ *     floor + the active genre weights (matchScore > 0).
+ *   - Search mode: items must share at least one genre with the seed AND
+ *     clear a vote-count floor.
+ * They dedupe against `existingIds` so the same title never repeats.
+ * Returning [] signals "no more relevant matches" and the UI stops loading.
  */
 
 const LOAD_MORE_BATCH = 12;
+const VOTE_COUNT_FLOOR = 40; // skip obscure / unverified titles
+const MAX_LOAD_MORE_PAGES = 8; // hard cap so we never scrape forever
 
 export async function loadMoreRecommendations(filters, page, existingIds) {
+  if (page > MAX_LOAD_MORE_PAGES + 2) return [];
+
   const profile = buildPreferenceProfile(filters);
   const mediaTypes = filters.type === "all" ? ["movie", "tv"] : [filters.type];
   const industry = getIndustry(filters);
@@ -290,10 +299,13 @@ export async function loadMoreRecommendations(filters, page, existingIds) {
     );
   });
 
-  // Dedupe against what's already on screen + dedupe among themselves
+  // Stage 1: cheap relevance filter (no enrichment yet)
   const seen = new Set();
+  const minRating = Number(filters.minRating || 0);
   const fresh = basic
     .filter((item) => item.poster_path || item.backdrop_path)
+    .filter((item) => (item.vote_count || 0) >= VOTE_COUNT_FLOOR)
+    .filter((item) => (item.vote_average || 0) >= minRating)
     .filter((item) => {
       const key = `${item.media_type}-${item.id}`;
       if (existingIds.has(key) || seen.has(key)) return false;
@@ -303,10 +315,15 @@ export async function loadMoreRecommendations(filters, page, existingIds) {
 
   if (!fresh.length) return [];
 
+  // Stage 2: rank by user profile, drop anything that doesn't actually
+  // align with their mood/genre/etc. (matchScore must include genre signal)
   const ranked = fresh
     .map((item) => ({ ...item, matchScore: scoreTitle(item, profile, filters) }))
+    .filter((item) => hasRelevantGenreOverlap(item, profile))
     .sort((a, b) => b.matchScore - a.matchScore)
     .slice(0, LOAD_MORE_BATCH);
+
+  if (!ranked.length) return [];
 
   const enriched = await Promise.all(ranked.map((item) => enrichItem(item, filters)));
 
@@ -320,6 +337,8 @@ export async function loadMoreRecommendations(filters, page, existingIds) {
 
 export async function loadMoreSimilar(seed, filters, page, existingIds) {
   if (!seed) return [];
+  if (page > MAX_LOAD_MORE_PAGES + 1) return [];
+
   let basic = [];
   try {
     const recs = await getRecommendations(seed.media_type, seed.id, page);
@@ -328,9 +347,24 @@ export async function loadMoreSimilar(seed, filters, page, existingIds) {
     return [];
   }
 
+  // Build the seed's genre set once (genre_ids on the search result OR
+  // the genres array on the enriched detail).
+  const seedGenres = new Set([
+    ...(seed.genre_ids || []),
+    ...((seed.detail?.genres || []).map((g) => g.id))
+  ]);
+
   const seen = new Set();
   const fresh = basic
     .filter((item) => item.poster_path || item.backdrop_path)
+    .filter((item) => (item.vote_count || 0) >= VOTE_COUNT_FLOOR)
+    .filter((item) => {
+      // Must share at least one genre with the seed - this is what stops
+      // the scroll from drifting into unrelated popular titles.
+      if (seedGenres.size === 0) return true;
+      const itemGenres = item.genre_ids || [];
+      return itemGenres.some((g) => seedGenres.has(g));
+    })
     .filter((item) => {
       const key = `${item.media_type}-${item.id}`;
       if (existingIds.has(key) || seen.has(key)) return false;
@@ -347,4 +381,19 @@ export async function loadMoreSimilar(seed, filters, page, existingIds) {
       filters.dubbedOnly && filters.dubLanguage ? item.dub.available : true
     )
     .filter((item) => isSelectedPlatformAvailable(item, filters.platform));
+}
+
+/**
+ * True if `item.genre_ids` overlaps with at least one genre carrying
+ * non-zero weight in the user's preference profile. Prevents Discover's
+ * later pages from injecting titles whose genres don't align with the
+ * user's mood/genre selection.
+ */
+function hasRelevantGenreOverlap(item, profile) {
+  const weights =
+    item.media_type === "tv" ? profile.tvGenreWeights : profile.movieGenreWeights;
+  const weightedGenres = Object.keys(weights);
+  if (!weightedGenres.length) return true; // no profile constraint -> allow
+  const itemGenres = (item.genre_ids || []).map(String);
+  return itemGenres.some((g) => weights[g] > 0);
 }
