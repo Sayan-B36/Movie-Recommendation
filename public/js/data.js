@@ -99,6 +99,33 @@ export const preferenceGroups = {
       { value: "kids", label: "Kids", icon: "Baby", movieGenres: [16, 10751, 14], tvGenres: [16, 10751, 10762], maxRuntime: 115 },
       { value: "weekend", label: "Weekend", icon: "CalendarDays", movieGenres: [28, 12, 35, 14], tvGenres: [10759, 10765, 35], minRating: 6.5 }
     ]
+  },
+  genre: {
+    label: "Genre",
+    options: [
+      { value: "any", label: "Any", icon: "LayoutGrid", movieGenres: [], tvGenres: [] },
+      { value: "action", label: "Action", icon: "Swords", movieGenres: [28], tvGenres: [10759] },
+      { value: "adventure", label: "Adventure", icon: "Mountain", movieGenres: [12], tvGenres: [10759] },
+      { value: "comedy", label: "Comedy", icon: "Laugh", movieGenres: [35], tvGenres: [35] },
+      { value: "drama", label: "Drama", icon: "Drama", movieGenres: [18], tvGenres: [18] },
+      { value: "romance", label: "Romance", icon: "Heart", movieGenres: [10749], tvGenres: [10749] },
+      { value: "thriller", label: "Thriller", icon: "Drama", movieGenres: [53], tvGenres: [9648] },
+      { value: "horror", label: "Horror", icon: "Skull", movieGenres: [27], tvGenres: [9648] },
+      { value: "sci-fi", label: "Sci-Fi", icon: "Atom", movieGenres: [878], tvGenres: [10765] },
+      { value: "fantasy", label: "Fantasy", icon: "Wand2", movieGenres: [14], tvGenres: [10765] },
+      { value: "animation", label: "Animation", icon: "Sparkles", movieGenres: [16], tvGenres: [16] },
+      { value: "documentary", label: "Documentary", icon: "FileText", movieGenres: [99], tvGenres: [99] },
+      { value: "mystery", label: "Mystery", icon: "Search", movieGenres: [9648], tvGenres: [9648] },
+      { value: "crime", label: "Crime", icon: "Fingerprint", movieGenres: [80], tvGenres: [80] },
+      { value: "war", label: "War", icon: "Shield", movieGenres: [10752], tvGenres: [10768] },
+      { value: "western", label: "Western", icon: "Compass", movieGenres: [37], tvGenres: [37] },
+      { value: "musical", label: "Musical", icon: "Music", movieGenres: [10402], tvGenres: [10402] },
+      { value: "biopic", label: "Biopic", icon: "BookOpen", movieGenres: [36, 18], tvGenres: [99, 18] },
+      { value: "superhero", label: "Superhero", icon: "Shield", movieGenres: [28, 12, 14, 878], tvGenres: [10759, 10765] },
+      { value: "satire", label: "Satire", icon: "Theater", movieGenres: [35, 18], tvGenres: [35, 18] },
+      { value: "sports", label: "Sports", icon: "Trophy", movieGenres: [99, 18], tvGenres: [10764] },
+      { value: "noir", label: "Noir", icon: "Moon", movieGenres: [80, 53, 18], tvGenres: [80, 9648] }
+    ]
   }
 };
 
@@ -115,6 +142,7 @@ export const defaultFilters = {
   climate: "rainy",
   time: "auto",
   occasion: "date",
+  genre: "any",
   type: "all",
   industry: "",
   dubLanguage: "hi",

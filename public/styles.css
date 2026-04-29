@@ -1322,10 +1322,144 @@ h1 {
 
 .platform-section,
 .similar-section,
-.seasons-section {
+.seasons-section,
+.cast-section {
   padding: 1.2rem 2rem;
   border-top: 1px solid var(--line);
   background: rgba(10, 10, 14, 0.72);
+}
+
+/* Genre line + description / View More inside detail-hero */
+
+.detail-genres {
+  margin: 0 0 0.65rem;
+  font-size: 0.95rem;
+  line-height: 1.45;
+  color: var(--text);
+}
+
+.detail-genres span {
+  color: var(--gold);
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  margin-right: 0.35rem;
+}
+
+.detail-overview {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 0.98rem;
+  line-height: 1.55;
+}
+
+.detail-overview .overview-text {
+  display: inline;
+}
+
+.view-more-btn {
+  display: inline;
+  margin-left: 0.4rem;
+  padding: 0;
+  background: none;
+  border: 0;
+  color: #ff6b6b;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  letter-spacing: 0.02em;
+  transition: color 160ms ease, text-shadow 160ms ease;
+}
+
+.view-more-btn:hover {
+  color: #ff8c8c;
+  text-shadow: 0 0 12px rgba(255, 107, 107, 0.4);
+  text-decoration: underline;
+}
+
+/* Cast & crew row */
+
+.cast-row {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 1.1rem;
+  overflow-x: auto;
+  padding: 0.4rem 0.2rem 0.6rem;
+  scroll-snap-type: x proximity;
+}
+
+.cast-row::-webkit-scrollbar {
+  height: 6px;
+}
+.cast-row::-webkit-scrollbar-thumb {
+  background: var(--line-strong);
+  border-radius: 999px;
+}
+
+.cast-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  flex: 0 0 110px;
+  gap: 0.45rem;
+  scroll-snap-align: start;
+}
+
+.cast-avatar {
+  width: 84px;
+  height: 84px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: linear-gradient(145deg, rgba(255, 211, 90, 0.18), rgba(155, 108, 255, 0.25));
+  border: 2px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 220ms ease, border-color 220ms ease;
+}
+
+.cast-card:hover .cast-avatar {
+  transform: translateY(-3px) scale(1.04);
+  border-color: rgba(255, 211, 90, 0.55);
+}
+
+.cast-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.cast-avatar-fallback {
+  font-size: 1.4rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.cast-card strong {
+  font-size: 0.85rem;
+  line-height: 1.2;
+  color: var(--text);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.cast-role {
+  font-size: 0.72rem;
+  color: var(--muted);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  max-width: 100%;
 }
 
 /* Collection badge on movie cards */

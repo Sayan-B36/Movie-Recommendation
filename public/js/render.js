@@ -42,7 +42,7 @@ export function renderApiPill(apiReady) {
 
 /* ------------------------------- Choice groups ----------------------------- */
 
-const CHOICE_GROUP_KEYS = ["mood", "climate", "time", "occasion"];
+const CHOICE_GROUP_KEYS = ["mood", "climate", "time", "occasion", "genre"];
 
 export function renderChoiceStack({ filters, onChange }) {
   const root = document.getElementById("choice-stack");
@@ -86,10 +86,15 @@ export function renderSelectionLine(filters) {
   const line = document.getElementById("selection-line");
   const timeLabel =
     filters.time === "auto" ? "Auto time" : getOptionLabel("time", filters.time);
-  line.textContent = `${getOptionLabel("mood", filters.mood)} / ${getOptionLabel(
-    "climate",
-    filters.climate
-  )} / ${timeLabel}`;
+  const parts = [
+    getOptionLabel("mood", filters.mood),
+    getOptionLabel("climate", filters.climate),
+    timeLabel
+  ];
+  if (filters.genre && filters.genre !== "any") {
+    parts.push(getOptionLabel("genre", filters.genre));
+  }
+  line.textContent = parts.filter(Boolean).join(" / ");
 }
 
 export function renderRunButton({ loading }) {

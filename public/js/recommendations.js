@@ -6,7 +6,7 @@ import {
   preferenceGroups
 } from "./data.js";
 
-const groupWeights = { mood: 4, climate: 2, time: 2, occasion: 3 };
+const groupWeights = { mood: 4, climate: 2, time: 2, occasion: 3, genre: 5 };
 
 export function getLanguageLabel(value) {
   return (

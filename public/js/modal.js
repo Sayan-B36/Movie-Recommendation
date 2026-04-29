@@ -10,6 +10,8 @@ import {
   normalizeResult
 } from "./recommendations.js";
 
+const OVERVIEW_CLAMP = 280;
+
 let escListener = null;
 let currentItem = null;
 let onSelectSimilarHandler = null;
@@ -49,11 +51,40 @@ export function openDetailModal({ item, filters, onSelectSimilar }) {
   const backdrop = imageUrl(item.backdrop_path || item.detail?.backdrop_path, "w1280");
   const poster = imageUrl(item.poster_path || item.detail?.poster_path, "w500");
   const trailer = getTrailer(item.detail?.videos?.results || [], filters.dubLanguage);
-  const cast = item.detail?.credits?.cast
-    ?.slice(0, 4)
-    .map((m) => m.name)
-    .join(", ");
+  // Build a unified "people" list: Director(s)/Creator(s) first, then top cast.
+  const credits = item.detail?.credits || {};
+  const directors = (credits.crew || [])
+    .filter((c) => c.job === "Director")
+    .slice(0, 2)
+    .map((c) => ({ ...c, role: "Director" }));
+  // For TV shows, TMDB exposes creators on the detail itself, not in credits.crew.
+  const creators =
+    item.media_type === "tv"
+      ? (item.detail?.created_by || []).slice(0, 2).map((c) => ({
+          id: c.id,
+          name: c.name,
+          profile_path: c.profile_path,
+          role: "Creator"
+        }))
+      : [];
+  const topCast = (credits.cast || []).slice(0, 10).map((c) => ({
+    ...c,
+    role: c.character ? `as ${c.character}` : "Cast"
+  }));
+  const people = [...directors, ...creators, ...topCast].slice(0, 12);
+
   const similar = item.detail?.similar?.results?.slice(0, 6) || [];
+
+  // Description / "View More" handling
+  const fullOverview =
+    item.overview || item.detail?.overview || "No description available.";
+  const overviewIsLong = fullOverview.length > OVERVIEW_CLAMP;
+  const shortOverview = overviewIsLong
+    ? fullOverview.slice(0, OVERVIEW_CLAMP).trimEnd() + "..."
+    : fullOverview;
+
+  // Genre line text (e.g. "Action, Superhero, Sci-Fi, Romance")
+  const genreText = getGenresText(item, 6);
 
   // Filter out "Specials" (season_number === 0) and seasons with 0 episodes.
   const seasons =
@@ -95,7 +126,17 @@ export function openDetailModal({ item, filters, onSelectSimilar }) {
               <span>${escapeHtml(getYear(item))}</span>
               <span>${escapeHtml(formatRuntime(item))}</span>
             </div>
-            <p>${escapeHtml(item.overview || item.detail?.overview || "No description available.")}</p>
+            <p class="detail-genres">
+              <span>Genre:</span> ${escapeHtml(genreText)}
+            </p>
+            <p class="detail-overview" data-expanded="false">
+              <span class="overview-text">${escapeHtml(shortOverview)}</span>
+              ${
+                overviewIsLong
+                  ? `<button type="button" class="view-more-btn" data-action="toggle-overview">View More</button>`
+                  : ""
+              }
+            </p>
           </div>
           ${
             poster
@@ -119,13 +160,11 @@ export function openDetailModal({ item, filters, onSelectSimilar }) {
           </section>
 
           <aside class="detail-facts">
-            <div class="fact"><span>Genres</span><strong>${escapeHtml(getGenresText(item, 5))}</strong></div>
             <div class="fact"><span>Language</span><strong>${escapeHtml(
               (item.original_language || item.detail?.original_language || "N/A").toUpperCase()
             )}</strong></div>
             <div class="fact"><span>Dub status</span><strong>${escapeHtml(item.dub?.label || "Unknown")}</strong></div>
             <div class="fact"><span>Dub note</span><strong>${escapeHtml(item.dub?.detail || "Best-effort metadata only.")}</strong></div>
-            ${cast ? `<div class="fact"><span>Cast</span><strong>${escapeHtml(cast)}</strong></div>` : ""}
           </aside>
         </div>
 
@@ -154,6 +193,44 @@ export function openDetailModal({ item, filters, onSelectSimilar }) {
             }
           </div>
         </section>
+
+        ${
+          people.length
+            ? `<section class="cast-section">
+              <div class="section-minihead">
+                ${iconHtml("Users", 16)} Cast & crew
+              </div>
+              <div class="cast-row">
+                ${people
+                  .map((p) => {
+                    const avatar = p.profile_path
+                      ? imageUrl(p.profile_path, "w185")
+                      : "";
+                    const initials = (p.name || "")
+                      .split(/\s+/)
+                      .map((part) => part[0])
+                      .filter(Boolean)
+                      .slice(0, 2)
+                      .join("")
+                      .toUpperCase();
+                    return `
+                  <div class="cast-card">
+                    <div class="cast-avatar">
+                      ${
+                        avatar
+                          ? `<img src="${avatar}" alt="${escapeHtml(p.name)}" loading="lazy" />`
+                          : `<span class="cast-avatar-fallback">${escapeHtml(initials || "?")}</span>`
+                      }
+                    </div>
+                    <strong>${escapeHtml(p.name || "Unknown")}</strong>
+                    <span class="cast-role">${escapeHtml(p.role)}</span>
+                  </div>`;
+                  })
+                  .join("")}
+              </div>
+            </section>`
+            : ""
+        }
 
         ${
           seasons.length
@@ -254,6 +331,26 @@ export function openDetailModal({ item, filters, onSelectSimilar }) {
       onSelectSimilarHandler(normalizeResult(similarItem, fromMedia));
     }
   });
+
+  // View More / Less toggle for the overview text
+  const overviewBtn = root.querySelector("[data-action='toggle-overview']");
+  if (overviewBtn) {
+    overviewBtn.addEventListener("click", () => {
+      const p = overviewBtn.closest(".detail-overview");
+      const textEl = p?.querySelector(".overview-text");
+      if (!p || !textEl) return;
+      const expanded = p.dataset.expanded === "true";
+      if (expanded) {
+        textEl.textContent = shortOverview;
+        overviewBtn.textContent = "View More";
+        p.dataset.expanded = "false";
+      } else {
+        textEl.textContent = fullOverview;
+        overviewBtn.textContent = "View Less";
+        p.dataset.expanded = "true";
+      }
+    });
+  }
 
   // Season card clicks → expand inline episode list
   if (seasons.length) {
