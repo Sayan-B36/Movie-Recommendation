@@ -156,6 +156,23 @@ app.get("/api/details/:mediaType/:id", async (req, res) => {
   }
 });
 
+app.get("/api/season/:tvId/:seasonNumber", async (req, res) => {
+  const { tvId, seasonNumber } = req.params;
+  if (!/^\d+$/.test(seasonNumber)) {
+    return res.status(400).json({ error: "seasonNumber must be a number." });
+  }
+  try {
+    const data = await tmdbGet(
+      `/tv/${encodeURIComponent(tvId)}/season/${encodeURIComponent(seasonNumber)}`,
+      {},
+      DETAIL_TTL
+    );
+    res.json(data);
+  } catch (error) {
+    res.status(error.status || 500).json({ error: error.message });
+  }
+});
+
 app.get("/api/collection/:id", async (req, res) => {
   const { id } = req.params;
   try {

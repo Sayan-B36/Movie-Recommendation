@@ -1,9 +1,15 @@
-import { getStatus, imageUrl, searchTitles } from "./api.js";
+import { getMediaDetails, getStatus, imageUrl, searchTitles } from "./api.js";
 import { fetchRecommendations, searchByTitle } from "./engine.js";
 import { renderIcons } from "./icons.js";
 import { setFilter, state } from "./state.js";
 import { openDetailModal } from "./modal.js";
-import { getTitle, getYear, getMediaLabel } from "./recommendations.js";
+import {
+  extractPlatforms,
+  getMediaLabel,
+  getTitle,
+  getYear,
+  inferDubStatus
+} from "./recommendations.js";
 import {
   renderApiPill,
   renderChoiceStack,
@@ -25,11 +31,7 @@ function rerender() {
     featured: state.results[0],
     filters: state.filters,
     apiReady: state.apiReady,
-    onOpenFeatured: () => state.results[0] && openDetailModal({
-      item: state.results[0],
-      filters: state.filters,
-      onSelectSimilar: (item) => openDetailModal({ item, filters: state.filters, onSelectSimilar: () => {} })
-    })
+    onOpenFeatured: () => state.results[0] && openModal(state.results[0])
   });
   renderFilters({ filters: state.filters, onChange: handleFilterChange });
   renderResults({
@@ -39,20 +41,31 @@ function rerender() {
     mode: state.mode,
     searchQuery: state.searchQuery,
     searchSeed: state.searchSeed,
-    onSelect: (item) =>
-      openDetailModal({
-        item,
-        filters: state.filters,
-        onSelectSimilar: (next) =>
-          openDetailModal({
-            item: next,
-            filters: state.filters,
-            onSelectSimilar: () => {}
-          })
-      })
+    onSelect: openModal
   });
   renderError(state.error);
   renderRefreshButton({ loading: state.loading, apiReady: state.apiReady });
+}
+
+async function openModal(item) {
+  // If `item.detail` is missing (e.g. clicked from a similar/collection card),
+  // fetch the details so trailer/platforms/seasons all populate.
+  let enriched = item;
+  if (!item.detail) {
+    try {
+      const detail = await getMediaDetails(item.media_type, item.id);
+      const platforms = extractPlatforms(detail, state.filters.region);
+      const dub = inferDubStatus({ ...item, detail }, state.filters.dubLanguage);
+      enriched = { ...item, detail, platforms, dub };
+    } catch {
+      // fall through with whatever we have
+    }
+  }
+  openDetailModal({
+    item: enriched,
+    filters: state.filters,
+    onSelectSimilar: openModal // recursive
+  });
 }
 
 function handleFilterChange(name, value) {
@@ -65,11 +78,7 @@ function handleFilterChange(name, value) {
     featured: state.results[0],
     filters: state.filters,
     apiReady: state.apiReady,
-    onOpenFeatured: () => state.results[0] && openDetailModal({
-      item: state.results[0],
-      filters: state.filters,
-      onSelectSimilar: (item) => openDetailModal({ item, filters: state.filters, onSelectSimilar: () => {} })
-    })
+    onOpenFeatured: () => state.results[0] && openModal(state.results[0])
   });
 }
 

@@ -41,6 +41,17 @@ export async function searchTitles(query) {
   return r.json();
 }
 
+export async function getSeasonDetail(tvId, seasonNumber) {
+  const r = await fetch(
+    `/api/season/${encodeURIComponent(tvId)}/${encodeURIComponent(seasonNumber)}`
+  );
+  if (!r.ok) {
+    const data = await r.json().catch(() => ({}));
+    throw new Error(data.error || `Season detail failed (${r.status}).`);
+  }
+  return r.json();
+}
+
 export async function getCollection(collectionId) {
   if (!collectionId) return null;
   const r = await fetch(`/api/collection/${encodeURIComponent(collectionId)}`);
