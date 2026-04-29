@@ -164,7 +164,7 @@ app.get("/api/season/:tvId/:seasonNumber", async (req, res) => {
   try {
     const data = await tmdbGet(
       `/tv/${encodeURIComponent(tvId)}/season/${encodeURIComponent(seasonNumber)}`,
-      {},
+      { append_to_response: "videos" },
       DETAIL_TTL
     );
     res.json(data);

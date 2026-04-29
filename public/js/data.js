@@ -1,4 +1,5 @@
 export const languageOptions = [
+  { value: "", label: "None", short: "—" },
   { value: "hi", label: "Hindi", short: "HI" },
   { value: "en", label: "English", short: "EN" },
   { value: "bn", label: "Bengali", short: "BN" },
@@ -12,6 +13,7 @@ export const languageOptions = [
 ];
 
 export const regionOptions = [
+  { value: "", label: "Any region" },
   { value: "IN", label: "India" },
   { value: "US", label: "United States" },
   { value: "GB", label: "United Kingdom" },

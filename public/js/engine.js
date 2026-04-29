@@ -125,7 +125,9 @@ export async function fetchRecommendations(filters) {
   const enriched = await Promise.all(ranked.map((item) => enrichItem(item, filters)));
 
   return enriched
-    .filter((item) => (filters.dubbedOnly ? item.dub.available : true))
+    .filter((item) =>
+      filters.dubbedOnly && filters.dubLanguage ? item.dub.available : true
+    )
     .filter((item) => isSelectedPlatformAvailable(item, filters.platform))
     .sort((a, b) => b.matchScore - a.matchScore)
     .slice(0, RESULT_LIMITS.final);

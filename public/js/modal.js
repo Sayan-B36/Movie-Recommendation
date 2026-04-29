@@ -260,7 +260,7 @@ export function openDetailModal({ item, filters, onSelectSimilar }) {
     root.querySelectorAll(".season-card").forEach((btn) => {
       btn.addEventListener("click", () => {
         const num = Number(btn.dataset.seasonNum);
-        toggleSeason(item.id, num, btn);
+        toggleSeason(item.id, num, filters);
       });
     });
   }
@@ -317,7 +317,7 @@ async function loadCollectionForModal(item, root) {
   }
 }
 
-async function toggleSeason(tvId, seasonNum, btn) {
+async function toggleSeason(tvId, seasonNum, filters) {
   const root = document.getElementById("modal-root");
   const panel = root?.querySelector("#episode-panel");
   if (!panel) return;
@@ -386,11 +386,30 @@ async function toggleSeason(tvId, seasonNum, btn) {
   const seasonName =
     data?.name && !/^Season\s*\d+$/i.test(data.name) ? data.name : `Season ${seasonNum}`;
 
+  const seasonTrailer = getTrailer(
+    data?.videos?.results || [],
+    filters?.dubLanguage
+  );
+
   panel.innerHTML = `
     <div class="episode-panel-head">
       <strong>${escapeHtml(seasonName)}</strong>
       <span>${episodes.length} episode${episodes.length > 1 ? "s" : ""}</span>
     </div>
+    ${
+      seasonTrailer
+        ? `<div class="season-trailer-box">
+            <iframe
+              src="https://www.youtube.com/embed/${encodeURIComponent(seasonTrailer.key)}?rel=0"
+              title="${escapeHtml(seasonName)} trailer"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowfullscreen
+            ></iframe>
+          </div>`
+        : `<div class="season-trailer-empty">
+            ${iconHtml("VideoOff", 14)} No trailer available for ${escapeHtml(seasonName)}.
+          </div>`
+    }
     <ul class="episode-list">
       ${episodes
         .map((ep) => {
