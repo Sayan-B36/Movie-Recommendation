@@ -282,7 +282,17 @@ function attachCardTilt(area) {
   });
 }
 
-export function renderResults({ loading, results, hasSearched, onSelect, mode, searchQuery, searchSeed }) {
+export function renderResults({
+  loading,
+  results,
+  hasSearched,
+  onSelect,
+  mode,
+  searchQuery,
+  searchSeed,
+  loadingMore = false,
+  canLoadMore = false
+}) {
   const heading = document.getElementById("results-heading");
   const eyebrow = document.querySelector(".results-section .eyebrow");
   const area = document.getElementById("results-area");
@@ -308,10 +318,30 @@ export function renderResults({ loading, results, hasSearched, onSelect, mode, s
   }
 
   if (results.length) {
+    const footerHtml = `
+      <div class="results-footer" id="results-footer" data-state="${
+        loadingMore ? "loading" : canLoadMore ? "ready" : "end"
+      }">
+        ${
+          loadingMore
+            ? `<div class="results-footer-loading">
+                ${iconHtml("Loader", 18)} Loading more matches...
+              </div>`
+            : canLoadMore
+            ? `<div class="results-footer-ready">
+                ${iconHtml("ChevronDown", 16)} Scroll for more
+              </div>`
+            : `<div class="results-footer-end">
+                ${iconHtml("Check", 14)} You've seen everything we found.
+              </div>`
+        }
+      </div>
+    `;
     area.innerHTML = `
       <div class="movie-grid">
         ${results.map(movieCardHtml).join("")}
       </div>
+      ${footerHtml}
     `;
     renderIcons(area);
     attachCardTilt(area);

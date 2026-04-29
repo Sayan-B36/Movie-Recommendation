@@ -9,7 +9,11 @@ export const state = {
   error: "",
   mode: "mood", // 'mood' | 'search'
   searchQuery: "",
-  searchSeed: null
+  searchSeed: null,
+  // Pagination for endless scrolling
+  page: 1, // next page to fetch when loadMore() runs
+  loadingMore: false,
+  canLoadMore: false
 };
 
 export function setFilter(name, value) {

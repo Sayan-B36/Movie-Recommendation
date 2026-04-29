@@ -911,6 +911,59 @@ h1 {
   line-height: 1.05;
 }
 
+.results-footer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 1.4rem 0 0.4rem;
+  padding: 1rem 1.2rem;
+  border-top: 1px dashed var(--line);
+  min-height: 56px;
+}
+
+.results-footer-loading,
+.results-footer-ready,
+.results-footer-end {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  color: var(--muted);
+  font-size: 0.9rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.results-footer-loading {
+  color: var(--gold);
+}
+
+.results-footer-loading [data-icon] {
+  animation: spin 1.1s linear infinite;
+}
+
+.results-footer-ready {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.results-footer-ready [data-icon] {
+  animation: bobDown 1.6s ease-in-out infinite;
+}
+
+.results-footer-end {
+  color: rgba(255, 255, 255, 0.4);
+  font-style: italic;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes bobDown {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(3px); }
+}
+
 .movie-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));

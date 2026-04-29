@@ -247,3 +247,104 @@ export async function searchByTitle(query, filters) {
   );
   return { seed: seedEnriched, results: final, collection };
 }
+
+/* ==========================================================================
+ * Endless scrolling helpers
+ * ==========================================================================
+ * Both functions return additional enriched items to append after the
+ * initial result set. They dedupe against `existingIds` so the UI never
+ * shows the same title twice. An empty array signals "no more pages".
+ */
+
+const LOAD_MORE_BATCH = 12;
+
+export async function loadMoreRecommendations(filters, page, existingIds) {
+  const profile = buildPreferenceProfile(filters);
+  const mediaTypes = filters.type === "all" ? ["movie", "tv"] : [filters.type];
+  const industry = getIndustry(filters);
+
+  const jobs = [];
+  mediaTypes.forEach((mediaType) => {
+    const genres = getDiscoverGenres(profile, mediaType);
+    const seeds = genres.length ? genres.slice(0, 2) : [""];
+    seeds.forEach((genre) => {
+      jobs.push({
+        mediaType,
+        promise: discoverMedia(mediaType, {
+          genre,
+          language: industry.language,
+          platform: filters.platform,
+          region: filters.region,
+          minRating: profile.minRating,
+          page
+        })
+      });
+    });
+  });
+
+  const settled = await Promise.allSettled(jobs.map((j) => j.promise));
+  const basic = settled.flatMap((result, idx) => {
+    if (result.status !== "fulfilled") return [];
+    return (result.value.results || []).map((item) =>
+      normalizeResult(item, jobs[idx].mediaType)
+    );
+  });
+
+  // Dedupe against what's already on screen + dedupe among themselves
+  const seen = new Set();
+  const fresh = basic
+    .filter((item) => item.poster_path || item.backdrop_path)
+    .filter((item) => {
+      const key = `${item.media_type}-${item.id}`;
+      if (existingIds.has(key) || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
+  if (!fresh.length) return [];
+
+  const ranked = fresh
+    .map((item) => ({ ...item, matchScore: scoreTitle(item, profile, filters) }))
+    .sort((a, b) => b.matchScore - a.matchScore)
+    .slice(0, LOAD_MORE_BATCH);
+
+  const enriched = await Promise.all(ranked.map((item) => enrichItem(item, filters)));
+
+  return enriched
+    .filter((item) =>
+      filters.dubbedOnly && filters.dubLanguage ? item.dub.available : true
+    )
+    .filter((item) => isSelectedPlatformAvailable(item, filters.platform))
+    .sort((a, b) => b.matchScore - a.matchScore);
+}
+
+export async function loadMoreSimilar(seed, filters, page, existingIds) {
+  if (!seed) return [];
+  let basic = [];
+  try {
+    const recs = await getRecommendations(seed.media_type, seed.id, page);
+    basic = (recs?.results || []).map((s) => normalizeResult(s, seed.media_type));
+  } catch {
+    return [];
+  }
+
+  const seen = new Set();
+  const fresh = basic
+    .filter((item) => item.poster_path || item.backdrop_path)
+    .filter((item) => {
+      const key = `${item.media_type}-${item.id}`;
+      if (existingIds.has(key) || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .slice(0, LOAD_MORE_BATCH);
+
+  if (!fresh.length) return [];
+
+  const enriched = await Promise.all(fresh.map((item) => enrichItem(item, filters)));
+  return enriched
+    .filter((item) =>
+      filters.dubbedOnly && filters.dubLanguage ? item.dub.available : true
+    )
+    .filter((item) => isSelectedPlatformAvailable(item, filters.platform));
+}

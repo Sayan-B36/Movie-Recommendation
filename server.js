@@ -126,9 +126,10 @@ app.get("/api/recommendations/:mediaType/:id", async (req, res) => {
     return res.status(400).json({ error: "mediaType must be 'movie' or 'tv'." });
   }
   try {
+    const page = Math.max(1, Number(req.query.page) || 1);
     const data = await tmdbGet(
       `/${mediaType}/${encodeURIComponent(id)}/recommendations`,
-      { page: 1 },
+      { page },
       DETAIL_TTL
     );
     res.json(data);

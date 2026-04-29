@@ -1,5 +1,10 @@
 import { getMediaDetails, getStatus, imageUrl, searchTitles } from "./api.js";
-import { fetchRecommendations, searchByTitle } from "./engine.js";
+import {
+  fetchRecommendations,
+  loadMoreRecommendations,
+  loadMoreSimilar,
+  searchByTitle
+} from "./engine.js";
 import { renderIcons } from "./icons.js";
 import { setFilter, state } from "./state.js";
 import { openDetailModal } from "./modal.js";
@@ -22,6 +27,79 @@ import {
   renderShowcase
 } from "./render.js";
 
+/* ---------------- Endless scroll ---------------- */
+
+let footerObserver = null;
+let lastObservedFooter = null;
+
+async function loadMore() {
+  if (state.loading || state.loadingMore || !state.canLoadMore) return;
+  state.loadingMore = true;
+  rerender();
+
+  const existingIds = new Set(
+    state.results.map((r) => `${r.media_type}-${r.id}`)
+  );
+
+  let newItems = [];
+  try {
+    if (state.mode === "search") {
+      newItems = await loadMoreSimilar(
+        state.searchSeed,
+        state.filters,
+        state.page,
+        existingIds
+      );
+    } else {
+      newItems = await loadMoreRecommendations(
+        state.filters,
+        state.page,
+        existingIds
+      );
+    }
+  } catch (err) {
+    console.warn("loadMore failed", err);
+  }
+
+  if (newItems.length) {
+    state.results = [...state.results, ...newItems];
+    state.page += 1;
+  } else {
+    // No fresh items returned; assume the catalog is exhausted.
+    state.canLoadMore = false;
+  }
+  state.loadingMore = false;
+  rerender();
+}
+
+function observeResultsFooter() {
+  // Lazily set up the IntersectionObserver once.
+  if (!footerObserver && "IntersectionObserver" in window) {
+    footerObserver = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) {
+            loadMore();
+          }
+        }
+      },
+      { rootMargin: "300px 0px" } // start loading slightly before footer hits viewport
+    );
+  }
+  if (!footerObserver) return;
+
+  // Re-target observer on every render (footer element is replaced each time).
+  if (lastObservedFooter) {
+    footerObserver.unobserve(lastObservedFooter);
+    lastObservedFooter = null;
+  }
+  const footer = document.getElementById("results-footer");
+  if (footer && state.canLoadMore && !state.loadingMore) {
+    footerObserver.observe(footer);
+    lastObservedFooter = footer;
+  }
+}
+
 function rerender() {
   renderApiPill(state.apiReady);
   renderChoiceStack({ filters: state.filters, onChange: handleFilterChange });
@@ -41,10 +119,13 @@ function rerender() {
     mode: state.mode,
     searchQuery: state.searchQuery,
     searchSeed: state.searchSeed,
+    loadingMore: state.loadingMore,
+    canLoadMore: state.canLoadMore,
     onSelect: openModal
   });
   renderError(state.error);
   renderRefreshButton({ loading: state.loading, apiReady: state.apiReady });
+  observeResultsFooter();
 }
 
 async function openModal(item) {
@@ -93,6 +174,9 @@ async function run() {
   state.loading = true;
   state.error = "";
   state.hasSearched = true;
+  state.page = 3; // pages 1+2 are consumed by the initial fetch
+  state.canLoadMore = false;
+  state.loadingMore = false;
   renderError("");
   renderRunButton({ loading: true });
   renderResults({ loading: true, results: [], hasSearched: true, onSelect: () => {} });
@@ -101,9 +185,11 @@ async function run() {
   try {
     const finalResults = await fetchRecommendations(state.filters);
     state.results = finalResults;
+    state.canLoadMore = finalResults.length > 0;
   } catch (error) {
     state.results = [];
     state.error = error?.message || "Could not load recommendations.";
+    state.canLoadMore = false;
   } finally {
     state.loading = false;
     rerender();
@@ -123,6 +209,9 @@ async function runSearch(query) {
   state.loading = true;
   state.error = "";
   state.hasSearched = true;
+  state.page = 2; // page 1 already consumed by initial searchByTitle()
+  state.canLoadMore = false;
+  state.loadingMore = false;
   hideSuggestions();
   renderError("");
   renderResults({ loading: true, results: [], hasSearched: true, onSelect: () => {} });
@@ -132,12 +221,14 @@ async function runSearch(query) {
     const { seed, results } = await searchByTitle(q, state.filters);
     state.searchSeed = seed;
     state.results = results;
+    state.canLoadMore = Boolean(seed && results.length);
     if (!results.length) {
       state.error = `No matches found for "${q}".`;
     }
   } catch (error) {
     state.results = [];
     state.searchSeed = null;
+    state.canLoadMore = false;
     state.error = error?.message || "Search failed.";
   } finally {
     state.loading = false;

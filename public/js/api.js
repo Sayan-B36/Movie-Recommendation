@@ -59,9 +59,9 @@ export async function getCollection(collectionId) {
   return r.json();
 }
 
-export async function getRecommendations(mediaType, id) {
+export async function getRecommendations(mediaType, id, page = 1) {
   const r = await fetch(
-    `/api/recommendations/${mediaType}/${encodeURIComponent(id)}`
+    `/api/recommendations/${mediaType}/${encodeURIComponent(id)}?page=${encodeURIComponent(page)}`
   );
   if (!r.ok) {
     const data = await r.json().catch(() => ({}));
