@@ -1,0 +1,16 @@
+{
+  "name": "moodflix-vanilla",
+  "version": "1.0.0",
+  "private": true,
+  "description": "MoodFlix in vanilla HTML/CSS/JS with an Express backend that hides TMDB/OMDb API keys.",
+  "main": "server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "express": "^4.21.1"
+  }
+}

@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="MoodFlix recommends movies and series by mood, weather, time, occasion, language, dubbed preference, and streaming platform."
+    />
+    <title>MoodFlix | Movie Recommendation</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="app-bg" aria-hidden="true">
+      <div class="film-lines"></div>
+      <div class="grain"></div>
+    </div>
+
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-mark" data-icon="Film" data-size="20"></span>
+        <span>MoodFlix</span>
+      </div>
+      <div class="topbar-actions">
+        <span id="api-pill" class="api-pill">
+          <span data-icon="KeyRound" data-size="16"></span>
+          <span id="api-pill-text">Connecting...</span>
+        </span>
+      </div>
+    </header>
+
+    <main class="app-shell">
+      <section class="hero-grid">
+        <div class="command-panel">
+          <div class="panel-kicker">
+            <span data-icon="Sparkles" data-size="16"></span>
+            Cinematic recommender
+          </div>
+          <h1>Mood-first movie and series picks</h1>
+          <p class="hero-copy">
+            Blend your mood, weather, language, platform, and occasion into a watchlist with
+            posters, trailers, ratings, and streaming availability.
+          </p>
+
+          <div id="choice-stack" class="choice-stack"></div>
+
+          <div class="action-row">
+            <button id="run-button" class="primary-button" type="button">
+              <span id="run-icon" data-icon="Wand2" data-size="18"></span>
+              <span id="run-label">Find matches</span>
+            </button>
+            <div id="selection-line" class="selection-line"></div>
+          </div>
+        </div>
+
+        <div id="showcase-panel" class="showcase-panel"></div>
+      </section>
+
+      <section class="filters-band">
+        <div class="band-title">
+          <span data-icon="SlidersHorizontal" data-size="18"></span>
+          Filters
+        </div>
+        <div id="filter-grid" class="filter-grid"></div>
+      </section>
+
+      <div id="error-panel" class="message-panel" role="alert" hidden></div>
+
+      <section class="results-section">
+        <div class="section-heading">
+          <div>
+            <span class="eyebrow">Your watchlist</span>
+            <h2 id="results-heading">Ready when you are</h2>
+          </div>
+          <button id="refresh-button" class="ghost-button" type="button" disabled>
+            <span data-icon="Filter" data-size="16"></span>
+            Refresh
+          </button>
+        </div>
+        <div id="results-area"></div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <span>This product uses the TMDB API but is not endorsed or certified by TMDB.</span>
+      <a href="https://www.themoviedb.org" target="_blank" rel="noreferrer">
+        TMDB
+        <span data-icon="ExternalLink" data-size="14"></span>
+      </a>
+      <a href="https://www.omdbapi.com/" target="_blank" rel="noreferrer">
+        OMDb
+        <span data-icon="ExternalLink" data-size="14"></span>
+      </a>
+    </footer>
+
+    <div id="modal-root"></div>
+
+    <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
+    <script type="module" src="/js/main.js"></script>
+  </body>
+</html>
