@@ -1,9 +1,7 @@
 import {
+  getDiscoverList,
   getMediaDetails,
-  getPopular,
   getStatus,
-  getTopRated,
-  getTrending,
   imageUrl,
   searchTitles
 } from "./api.js";
@@ -162,12 +160,18 @@ function rerender() {
     onOpenFeatured: () => state.results[0] && openModal(state.results[0])
   });
   renderFilters({ filters: state.filters, onChange: handleFilterChange });
-  renderDiscoverHub({
-    tab: state.discover.tab,
-    items: state.discover.items,
-    loading: state.discover.loading,
-    onSelect: openModal,
-    onTabChange: handleDiscoverTabChange
+  ["movie", "tv"].forEach((mt) => {
+    const slice = state.discover[mt];
+    renderDiscoverHub({
+      mediaType: mt,
+      tab: slice.tab,
+      industry: slice.industry,
+      items: slice.items,
+      loading: slice.loading,
+      onSelect: openModal,
+      onTabChange: (tab) => handleDiscoverTabChange(mt, tab),
+      onIndustryChange: (industry) => handleDiscoverIndustryChange(mt, industry)
+    });
   });
   renderResults({
     loading: state.loading,
@@ -199,36 +203,47 @@ function handleSortChange(value) {
 
 /* ---------------- Discover hub ---------------- */
 
-async function handleDiscoverTabChange(tab) {
-  if (state.discover.tab === tab && state.discover.items.length) return;
-  state.discover.tab = tab;
-  await loadDiscoverTab(tab);
+function discoverCacheKey(list, industry) {
+  return `${list}:${industry}`;
 }
 
-async function loadDiscoverTab(tab) {
+async function handleDiscoverTabChange(mediaType, tab) {
+  const slice = state.discover[mediaType];
+  if (slice.tab === tab && slice.items.length) return;
+  slice.tab = tab;
+  await loadDiscoverTab(mediaType);
+}
+
+async function handleDiscoverIndustryChange(mediaType, industry) {
+  const slice = state.discover[mediaType];
+  if (slice.industry === industry) return;
+  slice.industry = industry;
+  await loadDiscoverTab(mediaType);
+}
+
+async function loadDiscoverTab(mediaType) {
+  const slice = state.discover[mediaType];
+  const key = discoverCacheKey(slice.tab, slice.industry);
   // Serve from cache if available
-  if (state.discover.cache[tab]?.length) {
-    state.discover.items = state.discover.cache[tab];
-    state.discover.loading = false;
+  if (slice.cache[key]?.length) {
+    slice.items = slice.cache[key];
+    slice.loading = false;
     rerender();
     return;
   }
-  state.discover.loading = true;
-  state.discover.items = [];
+  slice.loading = true;
+  slice.items = [];
   rerender();
   try {
-    let data;
-    if (tab === "trending") data = await getTrending("week");
-    else if (tab === "popular") data = await getPopular("movie");
-    else data = await getTopRated("movie");
+    const data = await getDiscoverList(slice.tab, mediaType, slice.industry);
     const items = data.results || [];
-    state.discover.cache[tab] = items;
-    state.discover.items = items;
+    slice.cache[key] = items;
+    slice.items = items;
   } catch (e) {
-    console.warn("discover load failed", e);
-    state.discover.items = [];
+    console.warn(`discover ${mediaType} load failed`, e);
+    slice.items = [];
   } finally {
-    state.discover.loading = false;
+    slice.loading = false;
     rerender();
   }
 }
@@ -497,9 +512,10 @@ async function init() {
   }
   rerender();
 
-  // Kick off discover hub once we know TMDB is reachable.
+  // Kick off both discover hubs once we know TMDB is reachable.
   if (state.apiReady) {
-    loadDiscoverTab(state.discover.tab);
+    loadDiscoverTab("movie");
+    loadDiscoverTab("tv");
   }
 }
 

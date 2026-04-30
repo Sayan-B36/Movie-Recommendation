@@ -16,12 +16,24 @@ export const state = {
   page: 1, // next page to fetch when loadMore() runs
   loadingMore: false,
   canLoadMore: false,
-  // Discover hub (trending / popular / top-rated)
+  // Discover hub - one independent slice per media type. Each slice
+  // tracks its active tab, the industry filter, the in-flight loading
+  // state and a per-(list,industry) cache.
   discover: {
-    tab: "trending", // 'trending' | 'popular' | 'top'
-    items: [],
-    loading: false,
-    cache: {} // { trending: [...], popular: [...], top: [...] }
+    movie: {
+      tab: "trending", // trending | watched | liked | popular | upcoming
+      industry: "all", // all | bollywood | hollywood | dubbed
+      items: [],
+      loading: false,
+      cache: {} // { "<list>:<industry>": [...] }
+    },
+    tv: {
+      tab: "trending",
+      industry: "all",
+      items: [],
+      loading: false,
+      cache: {}
+    }
   }
 };
 

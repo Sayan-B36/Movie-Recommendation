@@ -759,72 +759,180 @@ async function fetchPaged(path, baseParams, pages, mediaType, ttl) {
 // Discover hub fetches 5 TMDB pages for ~100 titles per tab.
 const DISCOVER_PAGES = [1, 2, 3, 4, 5];
 
-app.get("/api/trending", async (req, res) => {
-  const window = req.query.window === "day" ? "day" : "week";
-  try {
-    const results = await fetchPaged(
-      `/trending/all/${window}`,
-      {},
-      DISCOVER_PAGES,
-      null,
-      1000 * 60 * 30
-    );
-    res.json({ results });
-  } catch (error) {
-    res.status(error.status || 500).json({ error: error.message });
-  }
-});
+const VALID_LISTS = new Set(["trending", "watched", "liked", "popular", "upcoming"]);
+const VALID_INDUSTRIES = new Set(["all", "bollywood", "hollywood", "dubbed"]);
+const INDUSTRY_TO_LANG = {
+  bollywood: "hi",
+  hollywood: "en"
+};
+// "Dubbed" surfaces titles in Asian languages most commonly available
+// dubbed in India (anime, K-drama, Korean cinema, Japanese cinema,
+// Tamil/Telugu/Malayalam content) - filtered with TMDB's pipe-OR.
+const DUBBED_LANGS = "ja|ko|zh|ta|te|ml";
+
+function isoToday() {
+  return new Date().toISOString().slice(0, 10);
+}
 
 /**
- * "Most Watched" tab. TMDB doesn't expose actual watch counts, so we
- * use vote_count.desc as a proxy: the films/shows with the highest
- * number of user ratings are by definition the most-watched ones.
- * This surfaces the cultural blockbusters (Avatar, Endgame, Titanic,
- * Dark Knight, Inception, Shawshank...) instead of "trending right
- * now" noise.
+ * Build the /discover/* request shape for a given (list, mediaType, industry).
+ * Returns { path, params } describing the TMDB request.
  */
-app.get("/api/popular/:mediaType", async (req, res) => {
-  const { mediaType } = req.params;
-  if (mediaType !== "movie" && mediaType !== "tv") {
-    return res.status(400).json({ error: "mediaType must be 'movie' or 'tv'." });
+function buildDiscoverRequest(list, mediaType, industry) {
+  const isMovie = mediaType === "movie";
+  const dateField = isMovie ? "primary_release_date" : "first_air_date";
+  const today = isoToday();
+  const langParam =
+    industry === "dubbed"
+      ? { with_original_language: DUBBED_LANGS }
+      : INDUSTRY_TO_LANG[industry]
+        ? { with_original_language: INDUSTRY_TO_LANG[industry] }
+        : {};
+
+  // "Trending" is best from /trending/{mt}/week. Industry filter is
+  // applied client-side because the trending endpoint doesn't accept
+  // a language param.
+  if (list === "trending") {
+    return {
+      path: `/trending/${mediaType}/week`,
+      params: {},
+      filterAfter: industry !== "all" ? langParam.with_original_language : null
+    };
   }
-  try {
-    const results = await fetchPaged(
-      `/discover/${mediaType}`,
-      {
+
+  if (list === "watched") {
+    return {
+      path: `/discover/${mediaType}`,
+      params: {
         sort_by: "vote_count.desc",
-        "vote_count.gte": 1000,
+        "vote_count.gte": isMovie ? 1000 : 200,
         include_adult: "false",
-        ...(mediaType === "movie" ? { include_video: "false" } : {})
-      },
-      DISCOVER_PAGES,
-      mediaType,
-      1000 * 60 * 60
-    );
+        ...(isMovie ? { include_video: "false" } : {}),
+        ...langParam
+      }
+    };
+  }
+
+  if (list === "liked") {
+    return {
+      path: `/discover/${mediaType}`,
+      params: {
+        sort_by: "vote_average.desc",
+        "vote_count.gte": isMovie ? 500 : 100,
+        include_adult: "false",
+        ...(isMovie ? { include_video: "false" } : {}),
+        ...langParam
+      }
+    };
+  }
+
+  if (list === "popular") {
+    return {
+      path: `/discover/${mediaType}`,
+      params: {
+        sort_by: "popularity.desc",
+        "vote_count.gte": 30,
+        include_adult: "false",
+        ...(isMovie ? { include_video: "false" } : {}),
+        ...langParam
+      }
+    };
+  }
+
+  if (list === "upcoming") {
+    return {
+      path: `/discover/${mediaType}`,
+      params: {
+        sort_by: `${dateField}.asc`,
+        [`${dateField}.gte`]: today,
+        include_adult: "false",
+        ...(isMovie ? { include_video: "false" } : {}),
+        ...langParam
+      }
+    };
+  }
+
+  // unreachable - validated above
+  return { path: `/discover/${mediaType}`, params: {} };
+}
+
+app.get("/api/discover-list", async (req, res) => {
+  const list = String(req.query.list || "").toLowerCase();
+  const mediaType = String(req.query.type || "movie").toLowerCase();
+  const industry = String(req.query.industry || "all").toLowerCase();
+
+  if (!VALID_LISTS.has(list)) {
+    return res.status(400).json({ error: `list must be one of ${[...VALID_LISTS].join(", ")}` });
+  }
+  if (mediaType !== "movie" && mediaType !== "tv") {
+    return res.status(400).json({ error: "type must be 'movie' or 'tv'." });
+  }
+  if (!VALID_INDUSTRIES.has(industry)) {
+    return res.status(400).json({ error: `industry must be one of ${[...VALID_INDUSTRIES].join(", ")}` });
+  }
+
+  try {
+    const { path, params, filterAfter } = buildDiscoverRequest(list, mediaType, industry);
+    let results = await fetchPaged(path, params, DISCOVER_PAGES, mediaType, 1000 * 60 * 30);
+    if (filterAfter) {
+      results = results.filter((r) => r.original_language === filterAfter);
+    }
+
+    // Fallback: trending + non-default industry can return very few items
+    // because the /trending endpoint doesn't accept a language param and
+    // global trending in any given week is usually English-dominated.
+    // When that happens, retry with /discover sorted by popularity over
+    // the last 60 days and the language param applied directly.
+    if (list === "trending" && industry !== "all" && results.length < 30) {
+      const langParam =
+        industry === "dubbed"
+          ? { with_original_language: DUBBED_LANGS }
+          : INDUSTRY_TO_LANG[industry]
+            ? { with_original_language: INDUSTRY_TO_LANG[industry] }
+            : {};
+      // Fall back to overall popularity for that industry (no date
+      // window) so the user sees a full scroll-strip of trending
+      // titles even when global trending is too sparse.
+      const fallbackParams = {
+        sort_by: "popularity.desc",
+        include_adult: "false",
+        ...(mediaType === "movie" ? { include_video: "false" } : {}),
+        ...langParam
+      };
+      const fallback = await fetchPaged(
+        `/discover/${mediaType}`,
+        fallbackParams,
+        DISCOVER_PAGES,
+        mediaType,
+        1000 * 60 * 30
+      );
+      const seen = new Set(results.map((r) => `${r.media_type || mediaType}-${r.id}`));
+      for (const item of fallback) {
+        const key = `${item.media_type || mediaType}-${item.id}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          results.push(item);
+        }
+      }
+    }
+
     res.json({ results });
   } catch (error) {
     res.status(error.status || 500).json({ error: error.message });
   }
 });
 
-app.get("/api/top-rated/:mediaType", async (req, res) => {
-  const { mediaType } = req.params;
-  if (mediaType !== "movie" && mediaType !== "tv") {
-    return res.status(400).json({ error: "mediaType must be 'movie' or 'tv'." });
-  }
-  try {
-    const results = await fetchPaged(
-      `/${mediaType}/top_rated`,
-      {},
-      DISCOVER_PAGES,
-      mediaType,
-      1000 * 60 * 60
-    );
-    res.json({ results });
-  } catch (error) {
-    res.status(error.status || 500).json({ error: error.message });
-  }
-});
+// Backward-compat redirects for old frontend bundles (cached JS).
+function redirectToDiscoverList(list) {
+  return (req, res) => {
+    const type = req.params.mediaType || req.query.type || "movie";
+    const industry = req.query.industry || "all";
+    res.redirect(307, `/api/discover-list?list=${list}&type=${type}&industry=${industry}`);
+  };
+}
+app.get("/api/trending", redirectToDiscoverList("trending"));
+app.get("/api/popular/:mediaType", redirectToDiscoverList("watched"));
+app.get("/api/top-rated/:mediaType", redirectToDiscoverList("liked"));
 
 app.get("/api/recommendations/:mediaType/:id", async (req, res) => {
   const { mediaType, id } = req.params;

@@ -2,6 +2,8 @@ import { iconHtml, renderIcons } from "./icons.js";
 import { imageUrl } from "./api.js";
 import {
   contentTypeOptions,
+  discoverIndustryOptions,
+  discoverLists,
   industryOptions,
   languageOptions,
   platformOptions,
@@ -409,13 +411,15 @@ export function renderRefreshButton({ loading, apiReady }) {
 
 /* ----------------------------- Discover Hub ----------------------------- */
 
-const DISCOVER_TITLES = {
-  trending: "Trending this week",
-  popular: "Most watched of all time",
-  top: "Most liked of all time"
-};
-
 const DISCOVER_MAX_ITEMS = 100;
+
+const DISCOVER_LIST_HEADING = {
+  trending: { movie: "Trending movies this week", tv: "Trending series this week" },
+  watched: { movie: "Most watched movies", tv: "Most watched series" },
+  liked: { movie: "Most liked movies", tv: "Most liked series" },
+  popular: { movie: "Most popular movies right now", tv: "Most popular series right now" },
+  upcoming: { movie: "Upcoming movies", tv: "Upcoming series" }
+};
 
 function discoverCardHtml(item) {
   const poster = imageUrl(item.poster_path, "w342");
@@ -453,18 +457,117 @@ function discoverSkeleton() {
   `;
 }
 
-export function renderDiscoverHub({ tab, items, loading, onSelect, onTabChange }) {
-  const root = document.getElementById("discover-hub");
-  if (!root) return;
-  const area = document.getElementById("discover-area");
-  const title = document.getElementById("discover-title");
-  if (title) title.textContent = DISCOVER_TITLES[tab] || DISCOVER_TITLES.trending;
+/**
+ * Build the static shell (heading + industry select + tabs + area)
+ * for one discover hub. Called once per media type on first render
+ * so subsequent updates only touch the dynamic area + tab active state.
+ */
+function buildDiscoverShell(root, mediaType) {
+  if (root.dataset.shellReady === "1") return;
+  const sectionLabel = mediaType === "movie" ? "Discover Movies" : "Discover Series";
+  const tabsHtml = discoverLists
+    .filter((l) => !(l.value === "upcoming" && mediaType === "tv" && false)) // keep upcoming for tv too
+    .map(
+      (l, idx) => `
+        <button
+          type="button"
+          class="discover-tab${idx === 0 ? " active" : ""}"
+          role="tab"
+          data-tab="${l.value}"
+        >
+          <span data-icon="${escapeHtml(toPascalIcon(l.icon))}" data-size="14"></span> ${escapeHtml(l.label)}
+        </button>
+      `
+    )
+    .join("");
+  const industryOpts = discoverIndustryOptions
+    .map((o) => `<option value="${escapeHtml(o.value)}">${escapeHtml(o.label)}</option>`)
+    .join("");
+  root.innerHTML = `
+    <div class="discover-heading">
+      <div>
+        <span class="eyebrow">${escapeHtml(sectionLabel)}</span>
+        <h2 data-discover-title>Trending ${mediaType === "movie" ? "movies" : "series"} this week</h2>
+      </div>
+      <label class="discover-industry">
+        <span class="discover-industry-label">Industry</span>
+        <select data-discover-industry>${industryOpts}</select>
+      </label>
+    </div>
+    <div class="discover-tabs" role="tablist" data-discover-tabs>${tabsHtml}</div>
+    <div class="discover-area" data-discover-area aria-live="polite"></div>
+  `;
+  renderIcons(root);
+  root.dataset.shellReady = "1";
+}
 
-  // tab active state
-  document.querySelectorAll("#discover-tabs .discover-tab").forEach((btn) => {
+// Lucide icon names are PascalCase but our config uses kebab-case for
+// readability. Convert "calendar-clock" -> "CalendarClock".
+function toPascalIcon(name) {
+  return (name || "")
+    .split("-")
+    .map((p) => p.charAt(0).toUpperCase() + p.slice(1))
+    .join("");
+}
+
+/**
+ * Render one discover hub for a given media type.
+ *
+ *   mediaType  "movie" | "tv"
+ *   tab        active list value
+ *   industry   active industry filter
+ *   items      result list
+ *   loading    boolean
+ *   onSelect   (item) => void  - called when a card is clicked
+ *   onTabChange       (tab) => void
+ *   onIndustryChange  (industry) => void
+ */
+export function renderDiscoverHub({
+  mediaType,
+  tab,
+  industry,
+  items,
+  loading,
+  onSelect,
+  onTabChange,
+  onIndustryChange
+}) {
+  const root = document.getElementById(`discover-hub-${mediaType}`);
+  if (!root) return;
+  buildDiscoverShell(root, mediaType);
+
+  const titleEl = root.querySelector("[data-discover-title]");
+  if (titleEl) {
+    const heading = (DISCOVER_LIST_HEADING[tab] && DISCOVER_LIST_HEADING[tab][mediaType]) || tab;
+    titleEl.textContent = heading;
+  }
+
+  // Industry select: keep it in sync with state and wire change once
+  const industrySel = root.querySelector("[data-discover-industry]");
+  if (industrySel) {
+    if (industrySel.value !== industry) industrySel.value = industry;
+    if (!industrySel.dataset.bound) {
+      industrySel.dataset.bound = "1";
+      industrySel.addEventListener("change", () => {
+        if (onIndustryChange) onIndustryChange(industrySel.value);
+      });
+    }
+  }
+
+  // Tab active state + click wiring (re-bind every render in case
+  // closures capture an out-of-date state)
+  const tabButtons = root.querySelectorAll("[data-discover-tabs] .discover-tab");
+  tabButtons.forEach((btn) => {
     btn.classList.toggle("active", btn.dataset.tab === tab);
+    if (!btn.dataset.bound) {
+      btn.dataset.bound = "1";
+      btn.addEventListener("click", () => {
+        if (onTabChange) onTabChange(btn.dataset.tab);
+      });
+    }
   });
 
+  const area = root.querySelector("[data-discover-area]");
   if (!area) return;
   if (loading) {
     area.innerHTML = discoverSkeleton();
@@ -488,14 +591,6 @@ export function renderDiscoverHub({ tab, items, loading, onSelect, onTabChange }
       if (item && onSelect) onSelect(item);
     });
   });
-
-  // Wire tab buttons (idempotent — replace listeners)
-  document.querySelectorAll("#discover-tabs .discover-tab").forEach((btn) => {
-    const fresh = btn.cloneNode(true);
-    btn.parentNode.replaceChild(fresh, btn);
-    fresh.addEventListener("click", () => onTabChange && onTabChange(fresh.dataset.tab));
-  });
-  renderIcons(document.getElementById("discover-tabs"));
 }
 
 /* ------------------------------ Sort field ------------------------------ */

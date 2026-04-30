@@ -42,28 +42,23 @@ export async function searchTitles(query, page = 1) {
   return r.json();
 }
 
-export async function getTrending(timeWindow = "week", page = 1) {
-  const url = new URL("/api/trending", window.location.origin);
-  url.searchParams.set("window", timeWindow);
-  if (page > 1) url.searchParams.set("page", String(page));
+/**
+ * Fetch one of the discover-hub lists.
+ *
+ *   list      "trending" | "watched" | "liked" | "popular" | "upcoming"
+ *   mediaType "movie" | "tv"
+ *   industry  "all" | "bollywood" | "hollywood" | "dubbed"
+ */
+export async function getDiscoverList(list, mediaType = "movie", industry = "all") {
+  const url = new URL("/api/discover-list", window.location.origin);
+  url.searchParams.set("list", list);
+  url.searchParams.set("type", mediaType);
+  url.searchParams.set("industry", industry);
   const r = await fetch(url);
-  if (!r.ok) throw new Error(`Trending failed (${r.status}).`);
-  return r.json();
-}
-
-export async function getPopular(mediaType = "movie", page = 1) {
-  const r = await fetch(
-    `/api/popular/${encodeURIComponent(mediaType)}?page=${page}`
-  );
-  if (!r.ok) throw new Error(`Popular failed (${r.status}).`);
-  return r.json();
-}
-
-export async function getTopRated(mediaType = "movie", page = 1) {
-  const r = await fetch(
-    `/api/top-rated/${encodeURIComponent(mediaType)}?page=${page}`
-  );
-  if (!r.ok) throw new Error(`Top-rated failed (${r.status}).`);
+  if (!r.ok) {
+    const data = await r.json().catch(() => ({}));
+    throw new Error(data.error || `Discover list failed (${r.status}).`);
+  }
   return r.json();
 }
 

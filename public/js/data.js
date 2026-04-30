@@ -166,3 +166,28 @@ export const RESULT_LIMITS = {
   final: 18,
   skeleton: 8
 };
+
+/**
+ * Discover hub list tabs. Each tab maps to a `list` value the
+ * /api/discover-list endpoint understands.
+ *
+ *   movieOnly   - tab is hidden for the Series section
+ */
+export const discoverLists = [
+  { value: "trending", label: "Trending", icon: "flame" },
+  { value: "watched", label: "Most Watched", icon: "eye" },
+  { value: "liked", label: "Most Liked", icon: "heart" },
+  { value: "popular", label: "Most Popular", icon: "trending-up" },
+  { value: "upcoming", label: "Upcoming", icon: "calendar-clock" }
+];
+
+/**
+ * Industry filter applied to every Discover list. "Dubbed" surfaces
+ * Asian-language titles commonly available with a Hindi dub in India.
+ */
+export const discoverIndustryOptions = [
+  { value: "all", label: "All industries" },
+  { value: "bollywood", label: "Bollywood" },
+  { value: "hollywood", label: "Hollywood" },
+  { value: "dubbed", label: "Dubbed" }
+];
