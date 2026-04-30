@@ -63,7 +63,20 @@ async function tmdbGet(pathname, params, cacheTtl) {
 }
 
 app.use(express.json());
-app.use(express.static(path.join(__dirname, "public")));
+// Force browser to revalidate every request so HTML/JS/CSS changes
+// pick up immediately. Without this, browsers aggressively cache the
+// JS bundles and users see stale UI after deploys.
+app.use(
+  express.static(path.join(__dirname, "public"), {
+    etag: true,
+    lastModified: true,
+    setHeaders(res, filePath) {
+      if (/\.(html|js|css)$/i.test(filePath)) {
+        res.setHeader("Cache-Control", "no-cache, must-revalidate");
+      }
+    }
+  })
+);
 
 app.get("/api/status", (_req, res) => {
   res.json({
@@ -575,35 +588,93 @@ async function smartSearch(rawQuery, page) {
 
   // 6) Collection fallback - "harry potter", "the godfather" etc. have
   //    no usable keyword, but they DO have a TMDB collection that
-  //    bundles all the films. Surface those before falling back to
-  //    title-mode (which only pins a single seed).
-  if (page === 1 && includeMovies) {
+  //    bundles all the films. Surface those plus any related titles
+  //    (sequel collections like Fantastic Beasts, the new HBO series,
+  //    anthology spin-offs) so the user sees the full universe, not
+  //    just one collection.
+  if (page === 1) {
     const collectionData = await tmdbGet(
       "/search/collection",
       { query: lookup, page: 1 },
       1000 * 60 * 60
     ).catch(() => ({ results: [] }));
-    const collections = (collectionData.results || []).filter((c) => {
+    // Match every collection whose name contains the lookup. For
+    // "harry potter" this returns both "Harry Potter Collection" and
+    // "Fantastic Beasts Collection" (extended Wizarding World).
+    const matchingCollections = (collectionData.results || []).filter((c) => {
       const name = (c.name || "").toLowerCase();
-      return name.includes(lookup) || lookup.includes(name.replace(/ collection$/i, "").trim());
+      const cleaned = name.replace(/\s*-?\s*collection$/i, "").trim();
+      return name.includes(lookup) || cleaned.includes(lookup) || lookup.includes(cleaned);
     });
-    if (collections.length) {
-      const top = collections[0];
-      const detail = await tmdbGet(`/collection/${top.id}`, {}, DETAIL_TTL).catch(() => null);
-      if (detail && Array.isArray(detail.parts) && detail.parts.length) {
-        const parts = detail.parts
-          .filter((p) => p.poster_path || p.backdrop_path)
-          .map((p) => ({ ...p, media_type: "movie" }))
-          .sort((a, b) => {
-            const da = (a.release_date || "").slice(0, 4);
-            const db = (b.release_date || "").slice(0, 4);
-            return da.localeCompare(db);
+
+    if (matchingCollections.length) {
+      // Pull all parts from up to 3 related collections in parallel.
+      const collectionDetails = await Promise.all(
+        matchingCollections.slice(0, 3).map((c) =>
+          tmdbGet(`/collection/${c.id}`, {}, DETAIL_TTL).catch(() => null)
+        )
+      );
+      const fromCollections = [];
+      const seenIds = new Set();
+      for (const detail of collectionDetails) {
+        if (!detail || !Array.isArray(detail.parts)) continue;
+        for (const p of detail.parts) {
+          const key = `movie-${p.id}`;
+          if (seenIds.has(key)) continue;
+          if (!p.poster_path && !p.backdrop_path) continue;
+          // Skip low-credibility entries (fan edits, fireplace videos,
+          // minor promo specials). Real franchise films easily clear 50.
+          if ((p.vote_count || 0) < 50 && (p.popularity || 0) < 3) continue;
+          seenIds.add(key);
+          fromCollections.push({ ...p, media_type: "movie" });
+        }
+      }
+
+      if (fromCollections.length) {
+        // Merge in TV series + standalone titles that share the lookup
+        // string (e.g. the new "Harry Potter" HBO series).
+        const titleExtras = (multiData.results || [])
+          .filter((r) => r.media_type === "movie" || r.media_type === "tv")
+          .filter((r) => r.poster_path || r.backdrop_path)
+          .filter((r) => {
+            const t = ((r.title || r.name) || "").toLowerCase();
+            return t.includes(lookup);
           });
-        if (parts.length) {
+        for (const extra of titleExtras) {
+          const key = `${extra.media_type}-${extra.id}`;
+          if (seenIds.has(key)) continue;
+          // For movies require some traction; for TV allow upcoming
+          // releases (first_air_date set, even if no votes yet) so the
+          // new HBO Harry Potter series shows up before it airs.
+          if (extra.media_type === "movie") {
+            if ((extra.vote_count || 0) < 50 && (extra.popularity || 0) < 3) continue;
+          } else {
+            const hasDate = extra.first_air_date || extra.release_date;
+            if (!hasDate && (extra.vote_count || 0) < 10) continue;
+          }
+          seenIds.add(key);
+          fromCollections.push(extra);
+        }
+
+        // Sort: movies chronologically by release year, TV at the end.
+        fromCollections.sort((a, b) => {
+          const da = (a.release_date || a.first_air_date || "").slice(0, 4);
+          const db = (b.release_date || b.first_air_date || "").slice(0, 4);
+          if (a.media_type !== b.media_type) {
+            return a.media_type === "movie" ? -1 : 1;
+          }
+          return da.localeCompare(db);
+        });
+
+        const filtered = fromCollections.filter((r) =>
+          r.media_type === "movie" ? includeMovies : includeTv
+        );
+        if (filtered.length) {
+          const topName = matchingCollections[0].name;
           return {
             mode: "concept",
-            concept: { type: "collection", id: top.id, name: top.name },
-            results: parts
+            concept: { type: "collection", id: matchingCollections[0].id, name: topName },
+            results: filtered
           };
         }
       }
