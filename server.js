@@ -214,6 +214,10 @@ app.get("/api/omdb", async (req, res) => {
   }
 });
 
+app.get('/api/health', (req, res) => {
+  res.status(200).send('OK');
+});
+
 app.listen(PORT, () => {
   const tmdbState = TMDB_KEY ? "configured" : "MISSING";
   const omdbState = OMDB_KEY ? "configured" : "missing (optional)";
