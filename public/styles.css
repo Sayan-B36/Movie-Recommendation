@@ -1996,6 +1996,7 @@ h1 {
 
 /* ============================ Responsive ============================ */
 
+/* Tablet / small laptop -------------------------------------------------- */
 @media (max-width: 1024px) {
   .hero-grid {
     grid-template-columns: 1fr;
@@ -2020,47 +2021,242 @@ h1 {
     padding: 1.25rem;
   }
   .platform-section,
-  .similar-section {
+  .similar-section,
+  .cast-section,
+  .seasons-section {
     padding: 1.25rem;
   }
 }
 
+/* Phone landscape / large phone portrait --------------------------------- */
 @media (max-width: 720px) {
+  /* Topbar: stack search to second row, keep brand + api pill side-by-side */
   .topbar {
     flex-wrap: wrap;
-    padding: 0.85rem 1rem;
+    gap: 0.6rem;
+    padding: 0.75rem 0.9rem;
+  }
+  .topbar-actions {
+    width: 100%;
+    gap: 0.55rem;
   }
   .search-form {
     order: 3;
     width: 100%;
+    height: 2.5rem;
   }
+  .api-pill {
+    flex: 0 0 auto;
+    font-size: 0.78rem;
+    padding: 0.4rem 0.65rem;
+  }
+
+  /* Page container */
   .app-shell {
-    width: calc(100% - 1.25rem);
-    padding: 1.25rem 0 2rem;
+    width: calc(100% - 1rem);
+    padding: 1rem 0 2rem;
+    gap: 0.85rem;
   }
   .command-panel {
     padding: 1rem;
   }
+
+  /* Headlines */
   h1 {
-    font-size: 2.1rem;
+    font-size: 1.9rem;
+    line-height: 1;
+    margin-bottom: 0.6rem;
   }
-  .preview-copy h2 {
-    font-size: 1.7rem;
+  .hero-copy {
+    font-size: 0.92rem;
+    margin-bottom: 1rem;
+  }
+  .panel-kicker {
+    font-size: 0.78rem;
+  }
+
+  /* Choice chips: tighter padding, smaller font */
+  .choice-stack {
+    gap: 0.75rem;
+  }
+  .choice-chip {
+    min-height: 2.1rem;
+    padding: 0.45rem 0.65rem;
+    font-size: 0.82rem;
+  }
+
+  /* Action row stacks vertically; button full-width */
+  .action-row {
+    gap: 0.75rem;
+  }
+  .primary-button {
+    width: 100%;
+    justify-content: center;
+  }
+  .selection-line {
+    width: 100%;
+    font-size: 0.82rem;
+  }
+
+  /* Showcase / featured */
+  .showcase-panel {
+    min-height: 320px;
   }
   .featured-content {
-    padding: 1.25rem;
+    padding: 1.1rem;
   }
   .featured-content h2 {
-    font-size: 1.9rem;
+    font-size: 1.6rem;
   }
+  .preview-copy h2 {
+    font-size: 1.5rem;
+  }
+
+  /* Filter band: 1 column on phones */
   .filters-band {
-    padding: 1rem;
+    padding: 0.9rem;
+  }
+  .filter-grid {
+    grid-template-columns: 1fr;
+    gap: 0.7rem;
+  }
+
+  /* Results grid: smaller cards, tighter gap */
+  .section-heading {
+    flex-wrap: wrap;
+    gap: 0.6rem;
+  }
+  .section-heading h2 {
+    font-size: 1.45rem;
   }
   .movie-grid {
-    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-    gap: 0.85rem;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 0.7rem;
+  }
+
+  /* Modal: nearly full-screen, less padding */
+  .modal-backdrop {
+    padding: 0.6rem 0.5rem;
+  }
+  .detail-modal {
+    border-radius: 12px;
+  }
+  .detail-hero {
+    padding: 1.5rem 1rem 1rem;
+    min-height: 0;
+    gap: 1rem;
   }
   .detail-copy h2 {
-    font-size: 1.7rem;
+    font-size: 1.5rem;
+  }
+  .detail-poster {
+    width: 110px;
+  }
+  .detail-meta {
+    font-size: 0.82rem;
+    gap: 0.4rem 0.7rem;
+  }
+  .detail-genres,
+  .detail-overview {
+    font-size: 0.88rem;
+  }
+  .detail-grid {
+    padding: 1rem;
+    gap: 1rem;
+  }
+  .platform-section,
+  .similar-section,
+  .cast-section,
+  .seasons-section {
+    padding: 1rem;
+  }
+  .cast-card {
+    flex: 0 0 92px;
+  }
+  .cast-avatar {
+    width: 72px;
+    height: 72px;
+  }
+  .seasons-grid {
+    grid-template-columns: repeat(auto-fill, minmax(135px, 1fr));
+    gap: 0.6rem;
+  }
+
+  /* Footer */
+  .site-footer {
+    flex-direction: column;
+    gap: 0.5rem;
+    text-align: center;
+    padding: 1.25rem 1rem 2rem;
+    font-size: 0.78rem;
+  }
+}
+
+/* Small phone (iPhone SE / Galaxy A-series) ------------------------------ */
+@media (max-width: 480px) {
+  /* Hide the "Find similar" label on the search submit, keep the icon */
+  .search-submit {
+    padding: 0 0.65rem;
+    font-size: 0;
+    gap: 0;
+  }
+  .search-submit [data-icon] {
+    font-size: 1rem;
+  }
+
+  /* Brand wordmark hidden on tiny screens; mark stays */
+  .brand span:not(.brand-mark) {
+    display: none;
+  }
+
+  /* Two-column movie grid */
+  .movie-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.6rem;
+  }
+
+  /* Smaller hero typography */
+  h1 {
+    font-size: 1.65rem;
+  }
+  .featured-content h2 {
+    font-size: 1.35rem;
+  }
+  .section-heading h2 {
+    font-size: 1.25rem;
+  }
+
+  /* Modal title scales down */
+  .detail-copy h2 {
+    font-size: 1.3rem;
+  }
+  .detail-poster {
+    width: 92px;
+  }
+
+  /* Cast cards even smaller */
+  .cast-card {
+    flex: 0 0 84px;
+  }
+  .cast-avatar {
+    width: 64px;
+    height: 64px;
+  }
+  .cast-card strong {
+    font-size: 0.78rem;
+  }
+  .cast-role {
+    font-size: 0.68rem;
+  }
+
+  /* Seasons grid: 2 columns guaranteed */
+  .seasons-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  /* Choice chip rows stay readable */
+  .choice-chip {
+    padding: 0.4rem 0.55rem;
+    font-size: 0.78rem;
   }
 }
