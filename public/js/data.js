@@ -153,11 +153,11 @@ export const defaultFilters = {
   genre: "any",
   type: "all",
   industry: "",
-  dubLanguage: "hi",
+  dubLanguage: "",
   dubbedOnly: false,
   platform: "",
   minRating: 6.5,
-  region: "IN",
+  region: "",
   sortBy: "match"
 };
 
