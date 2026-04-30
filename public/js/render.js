@@ -411,9 +411,11 @@ export function renderRefreshButton({ loading, apiReady }) {
 
 const DISCOVER_TITLES = {
   trending: "Trending this week",
-  popular: "Most watched right now",
+  popular: "Most watched of all time",
   top: "Most liked of all time"
 };
+
+const DISCOVER_MAX_ITEMS = 100;
 
 function discoverCardHtml(item) {
   const poster = imageUrl(item.poster_path, "w342");
@@ -475,7 +477,7 @@ export function renderDiscoverHub({ tab, items, loading, onSelect, onTabChange }
 
   area.innerHTML = `
     <div class="discover-track">
-      ${items.slice(0, 20).map(discoverCardHtml).join("")}
+      ${items.slice(0, DISCOVER_MAX_ITEMS).map(discoverCardHtml).join("")}
     </div>
   `;
   renderIcons(area);

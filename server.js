@@ -157,6 +157,8 @@ const GENRE_KEYWORD_MAP = {
 };
 
 const SUFFIX_RE = /\b(movies?|films?|cinema|series|shows?|tv|netflix|prime)\b/g;
+const MOVIE_SUFFIX_RE = /\b(movies?|films?|cinema)\b/i;
+const TV_SUFFIX_RE = /\b(series|shows?|tv|tv shows?)\b/i;
 
 /**
  * Alias map for common franchise abbreviations. TMDB's keyword search
@@ -216,21 +218,60 @@ function bestKeyword(keywords, lookup) {
 
 /**
  * Combined credits include lots of guest appearances (talk shows, awards,
- * "behind the scenes" docs) tagged as character "Self". Strip those plus
- * News (10763) and Talk (10767) so we surface real films/series.
+ * "behind the scenes" docs, cameos as themselves on TV) that are tagged
+ * either with character "Self" / "Himself" or with the person's own name.
+ * Strip those plus News (10763) and Talk (10767) so we surface real
+ * films/series the person actually made.
  */
-function isWorthwhilePersonCredit(credit) {
-  const character = (credit.character || "").toLowerCase();
-  if (character.startsWith("self") || character === "himself" || character === "herself") {
-    // Allow if their job is on the crew side (director, writer, producer)
-    if (!credit.job) return false;
-  }
+function isWorthwhilePersonCredit(credit, personName) {
+  const character = (credit.character || "").toLowerCase().trim();
+  const name = (personName || "").toLowerCase();
+  const isSelfCameo =
+    character.startsWith("self") ||
+    character === "himself" ||
+    character === "herself" ||
+    (name && (character === name || character === `${name} (uncredited)`));
+  if (isSelfCameo && !credit.job) return false;
   const genres = credit.genre_ids || [];
   if (genres.includes(10763) || genres.includes(10767)) return false; // News, Talk
   // Drop low-credibility items (TMDB sometimes lists rumours / shorts with no metadata)
   if ((credit.vote_count || 0) < 25 && (credit.popularity || 0) < 5) return false;
   return true;
 }
+
+/**
+ * Famous fictional characters mapped to the TMDB person id of their
+ * lead actor. TMDB's keyword search has no usable "tony stark" or
+ * "iron man" keyword (it only finds sub-string noise), so for character
+ * queries we hop straight to the actor's filmography.
+ */
+const CHARACTER_TO_PERSON_ID = {
+  "tony stark": 3223, // Robert Downey Jr.
+  "iron man": 3223,
+  "peter parker": 1136406, // Tom Holland
+  "spider man": 1136406,
+  spiderman: 1136406,
+  "bruce wayne": 3894, // Christian Bale (most acclaimed Batman)
+  batman: 3894,
+  "clark kent": 17276, // Henry Cavill
+  superman: 17276,
+  thor: 74568, // Chris Hemsworth
+  "steve rogers": 16828, // Chris Evans
+  "captain america": 16828,
+  "natasha romanoff": 1245, // Scarlett Johansson
+  "black widow": 1245,
+  "bruce banner": 103, // Mark Ruffalo
+  hulk: 103,
+  hermione: 10990, // Emma Watson
+  "frodo baggins": 109, // Elijah Wood
+  "luke skywalker": 2, // Mark Hamill
+  "darth vader": 5658, // James Earl Jones
+  "ethan hunt": 500, // Tom Cruise
+  "james bond": 8784, // Daniel Craig (most recent)
+  "john wick": 6384, // Keanu Reeves
+  "indiana jones": 3, // Harrison Ford
+  joker: 1810 // Heath Ledger
+};
 
 async function discoverByGenre(genreId, mediaType, page) {
   return tmdbGet(
@@ -257,23 +298,44 @@ async function smartSearch(rawQuery, page) {
   // Apply franchise alias (e.g. "dcu" -> "dc extended universe")
   const lookup = QUERY_ALIASES[rawLookup] || rawLookup;
 
+  // Detect explicit media-type intent so "marvel movies" returns ONLY
+  // movies (not Daredevil/SHIELD TV series) and "marvel series" returns
+  // only TV. Default = both.
+  const wantMovies = MOVIE_SUFFIX_RE.test(q);
+  const wantTv = TV_SUFFIX_RE.test(q);
+  const includeMovies = !wantTv;
+  const includeTv = !wantMovies;
+
   // 1) Direct genre map (e.g. "horror", "horror movies", "comedy")
   if (GENRE_KEYWORD_MAP[lookup]) {
     const g = GENRE_KEYWORD_MAP[lookup];
-    const [movieData, tvData] = await Promise.all([
-      discoverByGenre(g.movie, "movie", page).catch(() => ({ results: [] })),
-      discoverByGenre(g.tv, "tv", page).catch(() => ({ results: [] }))
+    const fetchPages = page === 1 ? [1, 2, 3] : [page + 2];
+    const requests = fetchPages.flatMap((p) => [
+      includeMovies ? discoverByGenre(g.movie, "movie", p).catch(() => ({ results: [] })) : Promise.resolve({ results: [] }),
+      includeTv ? discoverByGenre(g.tv, "tv", p).catch(() => ({ results: [] })) : Promise.resolve({ results: [] })
     ]);
-    const merged = [
-      ...(movieData.results || []).map((r) => ({ ...r, media_type: "movie" })),
-      ...(tvData.results || []).map((r) => ({ ...r, media_type: "tv" }))
-    ]
+    const responses = await Promise.all(requests);
+    const merged = [];
+    for (let i = 0; i < responses.length; i += 2) {
+      merged.push(
+        ...(responses[i].results || []).map((r) => ({ ...r, media_type: "movie" })),
+        ...(responses[i + 1].results || []).map((r) => ({ ...r, media_type: "tv" }))
+      );
+    }
+    const seen = new Set();
+    const deduped = merged
       .filter((r) => r.poster_path || r.backdrop_path)
+      .filter((r) => {
+        const k = `${r.media_type}-${r.id}`;
+        if (seen.has(k)) return false;
+        seen.add(k);
+        return true;
+      })
       .sort((a, b) => (b.popularity || 0) - (a.popularity || 0));
     return {
       mode: "concept",
       concept: { type: "genre", name: lookup },
-      results: merged
+      results: deduped
     };
   }
 
@@ -286,9 +348,14 @@ async function smartSearch(rawQuery, page) {
     page === 1
       ? tmdbGet("/search/keyword", { query: lookup, page: 1 }, 1000 * 60 * 60).catch(() => ({ results: [] }))
       : Promise.resolve({ results: [] });
+  // When the user appended "...movies" / "...films" we strip those words
+  // from the cleaned lookup; use the cleaned form for title search too
+  // so "harry potter movies" can match the actual Harry Potter films
+  // instead of the literal phrase "harry potter movies".
+  const titleQuery = hadSuffix ? lookup : q;
   const multiPromise = tmdbGet(
     "/search/multi",
-    { query: q, include_adult: "false", page },
+    { query: titleQuery, include_adult: "false", page },
     1000 * 60 * 10
   ).catch(() => ({ results: [] }));
 
@@ -305,7 +372,7 @@ async function smartSearch(rawQuery, page) {
   // Strong title hit = first result is popular AND user did NOT
   // hint a concept ("...movies/series"). Pinning by title makes
   // sense only for a real title intent.
-  const strongTitle =
+  let strongTitle =
     !hadSuffix &&
     titleMatches[0] &&
     (titleMatches[0].popularity || 0) > 8 &&
@@ -350,6 +417,12 @@ async function smartSearch(rawQuery, page) {
     return name === lookup || name.includes(lookup) || lookup.includes(name);
   });
   const topKeyword = bestKeyword(keywords, lookup);
+  // Exact-name franchise match always wins. Without this, a query like
+  // "star wars" pins Star Wars (1977) as the title seed and skips the
+  // franchise keyword that would surface the whole saga.
+  if (topKeyword && topKeyword.name.toLowerCase() === lookup) {
+    strongTitle = false;
+  }
 
   // Concept routes win when:
   //  - the title hit isn't strong, AND
@@ -364,8 +437,9 @@ async function smartSearch(rawQuery, page) {
       ? (credits.cast || [])
           .concat(credits.crew || [])
           .filter((c) => c.media_type === "movie" || c.media_type === "tv")
+          .filter((c) => (c.media_type === "movie" ? includeMovies : includeTv))
           .filter((c) => c.poster_path || c.backdrop_path)
-          .filter(isWorthwhilePersonCredit)
+          .filter((c) => isWorthwhilePersonCredit(c, topPerson.name))
       : [];
     // Dedupe (people can appear in both cast & crew). Prefer the entry
     // with a `job` (crew) when both exist - that's how directors/writers
@@ -379,11 +453,14 @@ async function smartSearch(rawQuery, page) {
     const uniq = Array.from(seen.values());
     uniq.sort((a, b) => (b.popularity || 0) - (a.popularity || 0));
     if (uniq.length) {
-      const start = (page - 1) * 20;
+      // Page 1 returns up to 60 (full filmography in one go); subsequent
+      // pages of 40 keep load-more working if the person has 100+ credits.
+      const PAGE_SIZE = page === 1 ? 60 : 40;
+      const start = page === 1 ? 0 : 60 + (page - 2) * 40;
       return {
         mode: "concept",
         concept: { type: "person", id: topPerson.id, name: topPerson.name },
-        results: uniq.slice(start, start + 20)
+        results: uniq.slice(start, start + PAGE_SIZE)
       };
     }
   }
@@ -392,47 +469,148 @@ async function smartSearch(rawQuery, page) {
     // Use the single best-matching keyword. Combining multiple keywords
     // with comma is OR-semantics in TMDB and produced noisy results
     // (e.g. "marvel" mixed unrelated marvel-tagged comedies in).
-    const [movieData, tvData] = await Promise.all([
-      tmdbGet(
-        "/discover/movie",
-        {
-          with_keywords: topKeyword.id,
-          sort_by: "popularity.desc",
-          "vote_count.gte": 30,
-          include_adult: "false",
-          include_video: "false",
-          page
-        },
-        DETAIL_TTL
-      ).catch(() => ({ results: [] })),
-      tmdbGet(
-        "/discover/tv",
-        {
-          with_keywords: topKeyword.id,
-          sort_by: "popularity.desc",
-          "vote_count.gte": 30,
-          include_adult: "false",
-          page
-        },
-        DETAIL_TTL
-      ).catch(() => ({ results: [] }))
-    ]);
+    // Page 1 fetches 3 TMDB pages (60 movies + 60 tv max) for a richer
+    // initial view; subsequent pages fetch 1 each.
+    const fetchPages = page === 1 ? [1, 2, 3] : [page + 2];
+    const movieRequests = includeMovies
+      ? fetchPages.map((p) =>
+          tmdbGet(
+            "/discover/movie",
+            {
+              with_keywords: topKeyword.id,
+              sort_by: "popularity.desc",
+              "vote_count.gte": 30,
+              include_adult: "false",
+              include_video: "false",
+              page: p
+            },
+            DETAIL_TTL
+          ).catch(() => ({ results: [] }))
+        )
+      : [];
+    const tvRequests = includeTv
+      ? fetchPages.map((p) =>
+          tmdbGet(
+            "/discover/tv",
+            {
+              with_keywords: topKeyword.id,
+              sort_by: "popularity.desc",
+              "vote_count.gte": 30,
+              include_adult: "false",
+              page: p
+            },
+            DETAIL_TTL
+          ).catch(() => ({ results: [] }))
+        )
+      : [];
+    const responses = await Promise.all([...movieRequests, ...tvRequests]);
+    const movieResults = responses.slice(0, movieRequests.length).flatMap((r) => r.results || []);
+    const tvResults = responses.slice(movieRequests.length).flatMap((r) => r.results || []);
     const merged = [
-      ...(movieData.results || []).map((r) => ({ ...r, media_type: "movie" })),
-      ...(tvData.results || []).map((r) => ({ ...r, media_type: "tv" }))
+      ...movieResults.map((r) => ({ ...r, media_type: "movie" })),
+      ...tvResults.map((r) => ({ ...r, media_type: "tv" }))
     ]
       .filter((r) => r.poster_path || r.backdrop_path)
       .sort((a, b) => (b.popularity || 0) - (a.popularity || 0));
-    if (merged.length) {
+    // Dedupe in case TMDB returned overlap across pages
+    const seen = new Set();
+    const deduped = merged.filter((m) => {
+      const k = `${m.media_type}-${m.id}`;
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    });
+    // Only commit to the keyword route if it actually returned a
+    // meaningful list. Some franchise keywords are sparsely tagged
+    // (e.g. "star wars" has 2 movies because curators use more
+    // specific keywords) - in that case fall through to title search.
+    if (deduped.length >= 6) {
       return {
         mode: "concept",
         concept: { type: "keyword", id: topKeyword.id, name: topKeyword.name },
-        results: merged
+        results: deduped
       };
     }
   }
 
-  // 5) Fallback: plain title search. If still empty AND user
+  // 5) Character fallback - "tony stark", "iron man", "batman" etc.
+  //    Triggers only if no franchise keyword was found above. Routes to
+  //    the lead actor's full filmography (TMDB has no usable keyword
+  //    for character names like "tony stark").
+  const characterPersonId = CHARACTER_TO_PERSON_ID[rawLookup];
+  if (characterPersonId) {
+    try {
+      const [person, credits] = await Promise.all([
+        tmdbGet(`/person/${characterPersonId}`, {}, DETAIL_TTL),
+        tmdbGet(`/person/${characterPersonId}/combined_credits`, {}, DETAIL_TTL)
+      ]);
+      const list = (credits.cast || [])
+        .concat(credits.crew || [])
+        .filter((c) => c.media_type === "movie" || c.media_type === "tv")
+        .filter((c) => (c.media_type === "movie" ? includeMovies : includeTv))
+        .filter((c) => c.poster_path || c.backdrop_path)
+        .filter((c) => isWorthwhilePersonCredit(c, person.name));
+      const seenIds = new Map();
+      list.forEach((c) => {
+        const key = `${c.media_type}-${c.id}`;
+        const ex = seenIds.get(key);
+        if (!ex || (c.job && !ex.job)) seenIds.set(key, c);
+      });
+      const uniq = Array.from(seenIds.values()).sort(
+        (a, b) => (b.popularity || 0) - (a.popularity || 0)
+      );
+      if (uniq.length) {
+        const PAGE_SIZE = page === 1 ? 60 : 40;
+        const start = page === 1 ? 0 : 60 + (page - 2) * 40;
+        return {
+          mode: "concept",
+          concept: { type: "person", id: person.id, name: `${rawLookup} (${person.name})` },
+          results: uniq.slice(start, start + PAGE_SIZE)
+        };
+      }
+    } catch {
+      /* fall through */
+    }
+  }
+
+  // 6) Collection fallback - "harry potter", "the godfather" etc. have
+  //    no usable keyword, but they DO have a TMDB collection that
+  //    bundles all the films. Surface those before falling back to
+  //    title-mode (which only pins a single seed).
+  if (page === 1 && includeMovies) {
+    const collectionData = await tmdbGet(
+      "/search/collection",
+      { query: lookup, page: 1 },
+      1000 * 60 * 60
+    ).catch(() => ({ results: [] }));
+    const collections = (collectionData.results || []).filter((c) => {
+      const name = (c.name || "").toLowerCase();
+      return name.includes(lookup) || lookup.includes(name.replace(/ collection$/i, "").trim());
+    });
+    if (collections.length) {
+      const top = collections[0];
+      const detail = await tmdbGet(`/collection/${top.id}`, {}, DETAIL_TTL).catch(() => null);
+      if (detail && Array.isArray(detail.parts) && detail.parts.length) {
+        const parts = detail.parts
+          .filter((p) => p.poster_path || p.backdrop_path)
+          .map((p) => ({ ...p, media_type: "movie" }))
+          .sort((a, b) => {
+            const da = (a.release_date || "").slice(0, 4);
+            const db = (b.release_date || "").slice(0, 4);
+            return da.localeCompare(db);
+          });
+        if (parts.length) {
+          return {
+            mode: "concept",
+            concept: { type: "collection", id: top.id, name: top.name },
+            results: parts
+          };
+        }
+      }
+    }
+  }
+
+  // 7) Fallback: plain title search. If still empty AND user
   //    hinted "...movies", do a last-ditch keyword discover.
   if (titleMatches.length) {
     return {
@@ -482,35 +660,76 @@ app.get("/api/search", async (req, res) => {
  * Trending / Popular / Top-rated (home discover hub)
  * ============================================================ */
 
+/**
+ * Fetch a TMDB list endpoint across N pages and merge/dedupe results.
+ */
+async function fetchPaged(path, baseParams, pages, mediaType, ttl) {
+  const responses = await Promise.all(
+    pages.map((p) =>
+      tmdbGet(path, { ...baseParams, page: p }, ttl).catch(() => ({ results: [] }))
+    )
+  );
+  const seen = new Set();
+  const merged = [];
+  for (const r of responses) {
+    for (const item of r.results || []) {
+      if (!item.poster_path && !item.backdrop_path) continue;
+      const mt = item.media_type || mediaType;
+      if (mt !== "movie" && mt !== "tv") continue;
+      const key = `${mt}-${item.id}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      merged.push({ ...item, media_type: mt });
+    }
+  }
+  return merged;
+}
+
+// Discover hub fetches 5 TMDB pages for ~100 titles per tab.
+const DISCOVER_PAGES = [1, 2, 3, 4, 5];
+
 app.get("/api/trending", async (req, res) => {
   const window = req.query.window === "day" ? "day" : "week";
-  const page = Math.max(1, Number(req.query.page) || 1);
   try {
-    const data = await tmdbGet(
+    const results = await fetchPaged(
       `/trending/all/${window}`,
-      { page },
+      {},
+      DISCOVER_PAGES,
+      null,
       1000 * 60 * 30
     );
-    const results = (data.results || [])
-      .filter((r) => r.media_type === "movie" || r.media_type === "tv")
-      .filter((r) => r.poster_path || r.backdrop_path);
     res.json({ results });
   } catch (error) {
     res.status(error.status || 500).json({ error: error.message });
   }
 });
 
+/**
+ * "Most Watched" tab. TMDB doesn't expose actual watch counts, so we
+ * use vote_count.desc as a proxy: the films/shows with the highest
+ * number of user ratings are by definition the most-watched ones.
+ * This surfaces the cultural blockbusters (Avatar, Endgame, Titanic,
+ * Dark Knight, Inception, Shawshank...) instead of "trending right
+ * now" noise.
+ */
 app.get("/api/popular/:mediaType", async (req, res) => {
   const { mediaType } = req.params;
   if (mediaType !== "movie" && mediaType !== "tv") {
     return res.status(400).json({ error: "mediaType must be 'movie' or 'tv'." });
   }
-  const page = Math.max(1, Number(req.query.page) || 1);
   try {
-    const data = await tmdbGet(`/${mediaType}/popular`, { page }, 1000 * 60 * 30);
-    const results = (data.results || [])
-      .filter((r) => r.poster_path || r.backdrop_path)
-      .map((r) => ({ ...r, media_type: mediaType }));
+    const results = await fetchPaged(
+      `/discover/${mediaType}`,
+      {
+        sort_by: "vote_count.desc",
+        "vote_count.gte": 1000,
+        include_adult: "false",
+        ...(mediaType === "movie" ? { include_video: "false" } : {})
+      },
+      DISCOVER_PAGES,
+      mediaType,
+      1000 * 60 * 60
+    );
     res.json({ results });
   } catch (error) {
     res.status(error.status || 500).json({ error: error.message });
@@ -522,12 +741,14 @@ app.get("/api/top-rated/:mediaType", async (req, res) => {
   if (mediaType !== "movie" && mediaType !== "tv") {
     return res.status(400).json({ error: "mediaType must be 'movie' or 'tv'." });
   }
-  const page = Math.max(1, Number(req.query.page) || 1);
   try {
-    const data = await tmdbGet(`/${mediaType}/top_rated`, { page }, 1000 * 60 * 60);
-    const results = (data.results || [])
-      .filter((r) => r.poster_path || r.backdrop_path)
-      .map((r) => ({ ...r, media_type: mediaType }));
+    const results = await fetchPaged(
+      `/${mediaType}/top_rated`,
+      {},
+      DISCOVER_PAGES,
+      mediaType,
+      1000 * 60 * 60
+    );
     res.json({ results });
   } catch (error) {
     res.status(error.status || 500).json({ error: error.message });

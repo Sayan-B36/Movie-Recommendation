@@ -155,10 +155,17 @@ export async function searchByTitle(query, filters) {
   }
 
   // ---- Concept mode (no seed pinning) ----
+  // For franchise / person / genre browsing we want to show MUCH more
+  // than the 18-title cap used for filter-based recommendations.
+  // The user expects "marvel movies" to actually show all marvel
+  // movies, not just 18.
   if (mode === "concept") {
+    const CONCEPT_PRE_ENRICH_CAP = 80;
+    const CONCEPT_FINAL_CAP = 60;
+
     const candidates = matches
       .filter((m) => m.poster_path || m.backdrop_path)
-      .slice(0, RESULT_LIMITS.preEnrichment)
+      .slice(0, CONCEPT_PRE_ENRICH_CAP)
       .map((m) => normalizeResult(m, m.media_type || "movie"));
 
     const seen = new Set();
@@ -169,7 +176,15 @@ export async function searchByTitle(query, filters) {
       return true;
     });
 
-    const enriched = await Promise.all(unique.map((item) => enrichItem(item, filters)));
+    // Enrich in chunks of 12 to avoid stalling on a 60-item Promise.all.
+    const enriched = [];
+    for (let i = 0; i < unique.length; i += 12) {
+      const chunk = unique.slice(i, i + 12);
+      // eslint-disable-next-line no-await-in-loop
+      const part = await Promise.all(chunk.map((item) => enrichItem(item, filters)));
+      enriched.push(...part);
+    }
+
     const minRating = Number(filters.minRating || 0);
     const final = enriched
       .filter((item) => (item.vote_average || 0) >= minRating)
@@ -178,7 +193,7 @@ export async function searchByTitle(query, filters) {
       )
       .filter((item) => isSelectedPlatformAvailable(item, filters.platform))
       .sort((a, b) => (b.popularity || 0) - (a.popularity || 0))
-      .slice(0, RESULT_LIMITS.final);
+      .slice(0, CONCEPT_FINAL_CAP);
 
     return { seed: null, results: final, mode: "concept", concept, collection: null };
   }
