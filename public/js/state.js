@@ -10,10 +10,19 @@ export const state = {
   mode: "mood", // 'mood' | 'search'
   searchQuery: "",
   searchSeed: null,
+  searchConcept: null, // { type:'genre'|'keyword'|'person', id, name } | null
+  searchMode: "title", // 'title' | 'concept'
   // Pagination for endless scrolling
   page: 1, // next page to fetch when loadMore() runs
   loadingMore: false,
-  canLoadMore: false
+  canLoadMore: false,
+  // Discover hub (trending / popular / top-rated)
+  discover: {
+    tab: "trending", // 'trending' | 'popular' | 'top'
+    items: [],
+    loading: false,
+    cache: {} // { trending: [...], popular: [...], top: [...] }
+  }
 };
 
 export function setFilter(name, value) {

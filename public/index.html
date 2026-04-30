@@ -89,6 +89,27 @@
         <div id="filter-grid" class="filter-grid"></div>
       </section>
 
+      <section class="discover-hub" id="discover-hub" aria-label="Discover">
+        <div class="discover-heading">
+          <div>
+            <span class="eyebrow">Discover</span>
+            <h2 id="discover-title">Trending this week</h2>
+          </div>
+          <div class="discover-tabs" role="tablist" id="discover-tabs">
+            <button type="button" class="discover-tab active" role="tab" data-tab="trending">
+              <span data-icon="Flame" data-size="14"></span> Trending
+            </button>
+            <button type="button" class="discover-tab" role="tab" data-tab="popular">
+              <span data-icon="Eye" data-size="14"></span> Most Watched
+            </button>
+            <button type="button" class="discover-tab" role="tab" data-tab="top">
+              <span data-icon="Star" data-size="14"></span> Most Liked
+            </button>
+          </div>
+        </div>
+        <div id="discover-area" class="discover-row" aria-live="polite"></div>
+      </section>
+
       <div id="error-panel" class="message-panel" role="alert" hidden></div>
 
       <section class="results-section">
@@ -97,10 +118,18 @@
             <span class="eyebrow">Your watchlist</span>
             <h2 id="results-heading">Ready when you are</h2>
           </div>
-          <button id="refresh-button" class="ghost-button" type="button" disabled>
-            <span data-icon="Filter" data-size="16"></span>
-            Refresh
-          </button>
+          <div class="section-actions">
+            <label class="sort-field" id="sort-field" hidden>
+              <span data-icon="ArrowUpDown" data-size="14"></span>
+              <span class="sort-label">Sort</span>
+              <select id="results-sort" aria-label="Sort results"></select>
+              <span data-icon="ChevronDown" data-size="14"></span>
+            </label>
+            <button id="refresh-button" class="ghost-button" type="button" disabled>
+              <span data-icon="Filter" data-size="16"></span>
+              Refresh
+            </button>
+          </div>
         </div>
         <div id="results-area"></div>
       </section>

@@ -28,16 +28,42 @@ export async function getMediaDetails(mediaType, id) {
   return r.json();
 }
 
-export async function searchTitles(query) {
+export async function searchTitles(query, page = 1) {
   const q = (query || "").trim();
-  if (!q) return { results: [] };
+  if (!q) return { mode: "title", concept: null, results: [] };
   const url = new URL("/api/search", window.location.origin);
   url.searchParams.set("q", q);
+  if (page > 1) url.searchParams.set("page", String(page));
   const r = await fetch(url);
   if (!r.ok) {
     const data = await r.json().catch(() => ({}));
     throw new Error(data.error || `Search failed (${r.status}).`);
   }
+  return r.json();
+}
+
+export async function getTrending(timeWindow = "week", page = 1) {
+  const url = new URL("/api/trending", window.location.origin);
+  url.searchParams.set("window", timeWindow);
+  if (page > 1) url.searchParams.set("page", String(page));
+  const r = await fetch(url);
+  if (!r.ok) throw new Error(`Trending failed (${r.status}).`);
+  return r.json();
+}
+
+export async function getPopular(mediaType = "movie", page = 1) {
+  const r = await fetch(
+    `/api/popular/${encodeURIComponent(mediaType)}?page=${page}`
+  );
+  if (!r.ok) throw new Error(`Popular failed (${r.status}).`);
+  return r.json();
+}
+
+export async function getTopRated(mediaType = "movie", page = 1) {
+  const r = await fetch(
+    `/api/top-rated/${encodeURIComponent(mediaType)}?page=${page}`
+  );
+  if (!r.ok) throw new Error(`Top-rated failed (${r.status}).`);
   return r.json();
 }
 

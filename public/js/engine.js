@@ -134,17 +134,56 @@ export async function fetchRecommendations(filters) {
 }
 
 /**
- * Search by title, then return [seedTitle, ...similarTitles] enriched with
- * platforms / IMDb ratings so the user can play the trailer and see where
- * it streams. Falls back from /recommendations to /similar if needed.
+ * Search by query, returns either:
+ *  - title mode: { mode:"title", seed, results:[seed, ...collection, ...similar] }
+ *  - concept mode (genre/keyword/person): { mode:"concept", seed:null, concept, results:[...] }
+ *
+ * Title mode pins a seed and uses /recommendations for "more like this".
+ * Concept mode treats the smart-search response like discover output and
+ * lets `loadMoreConcept` paginate via /api/search?page=N.
  */
 export async function searchByTitle(query, filters) {
   const q = (query || "").trim();
-  if (!q) return { seed: null, results: [] };
+  if (!q) return { seed: null, results: [], mode: "title", concept: null };
 
-  const { results: matches } = await searchTitles(q);
-  if (!matches.length) return { seed: null, results: [] };
+  const data = await searchTitles(q);
+  const matches = data.results || [];
+  const mode = data.mode || "title";
+  const concept = data.concept || null;
+  if (!matches.length) {
+    return { seed: null, results: [], mode, concept };
+  }
 
+  // ---- Concept mode (no seed pinning) ----
+  if (mode === "concept") {
+    const candidates = matches
+      .filter((m) => m.poster_path || m.backdrop_path)
+      .slice(0, RESULT_LIMITS.preEnrichment)
+      .map((m) => normalizeResult(m, m.media_type || "movie"));
+
+    const seen = new Set();
+    const unique = candidates.filter((item) => {
+      const k = `${item.media_type}-${item.id}`;
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    });
+
+    const enriched = await Promise.all(unique.map((item) => enrichItem(item, filters)));
+    const minRating = Number(filters.minRating || 0);
+    const final = enriched
+      .filter((item) => (item.vote_average || 0) >= minRating)
+      .filter((item) =>
+        filters.dubbedOnly && filters.dubLanguage ? item.dub.available : true
+      )
+      .filter((item) => isSelectedPlatformAvailable(item, filters.platform))
+      .sort((a, b) => (b.popularity || 0) - (a.popularity || 0))
+      .slice(0, RESULT_LIMITS.final);
+
+    return { seed: null, results: final, mode: "concept", concept, collection: null };
+  }
+
+  // ---- Title mode: existing seed + similar + collection flow ----
   const seedRaw = matches[0];
   const mediaType = seedRaw.media_type;
   const seed = normalizeResult(seedRaw, mediaType);
@@ -245,7 +284,48 @@ export async function searchByTitle(query, filters) {
     0,
     RESULT_LIMITS.final
   );
-  return { seed: seedEnriched, results: final, collection };
+  return { seed: seedEnriched, results: final, collection, mode: "title", concept: null };
+}
+
+/**
+ * Page through concept-mode search results (genre/keyword/person)
+ * by re-querying /api/search with an incrementing page. Stops when
+ * the server runs out of fresh, in-budget items.
+ */
+export async function loadMoreConcept(query, filters, page, existingIds) {
+  if (page > MAX_LOAD_MORE_PAGES + 2) return [];
+  let data;
+  try {
+    data = await searchTitles(query, page);
+  } catch {
+    return [];
+  }
+  if (!data || data.mode !== "concept") return [];
+
+  const seen = new Set();
+  const minRating = Number(filters.minRating || 0);
+  const fresh = (data.results || [])
+    .filter((item) => item.poster_path || item.backdrop_path)
+    .filter((item) => (item.vote_count || 0) >= VOTE_COUNT_FLOOR)
+    .filter((item) => (item.vote_average || 0) >= minRating)
+    .map((item) => normalizeResult(item, item.media_type || "movie"))
+    .filter((item) => {
+      const key = `${item.media_type}-${item.id}`;
+      if (existingIds.has(key) || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .slice(0, LOAD_MORE_BATCH);
+
+  if (!fresh.length) return [];
+
+  const enriched = await Promise.all(fresh.map((item) => enrichItem(item, filters)));
+  return enriched
+    .filter((item) =>
+      filters.dubbedOnly && filters.dubLanguage ? item.dub.available : true
+    )
+    .filter((item) => isSelectedPlatformAvailable(item, filters.platform))
+    .sort((a, b) => (b.popularity || 0) - (a.popularity || 0));
 }
 
 /* ==========================================================================

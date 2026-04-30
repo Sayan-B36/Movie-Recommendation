@@ -7,7 +7,8 @@ import {
   platformOptions,
   preferenceGroups,
   regionOptions,
-  RESULT_LIMITS
+  RESULT_LIMITS,
+  sortOptions
 } from "./data.js";
 import {
   getGenresText,
@@ -282,6 +283,16 @@ function attachCardTilt(area) {
   });
 }
 
+function conceptHeading(concept, query) {
+  if (!concept) return null;
+  const name = concept.name || query;
+  const pretty = name.replace(/\b\w/g, (c) => c.toUpperCase());
+  if (concept.type === "person") return `Films & shows by ${pretty}`;
+  if (concept.type === "genre") return `${pretty} picks`;
+  if (concept.type === "keyword") return `Titles tagged "${pretty}"`;
+  return `Results for "${query}"`;
+}
+
 export function renderResults({
   loading,
   results,
@@ -290,6 +301,7 @@ export function renderResults({
   mode,
   searchQuery,
   searchSeed,
+  searchConcept,
   loadingMore = false,
   canLoadMore = false
 }) {
@@ -298,11 +310,20 @@ export function renderResults({
   const area = document.getElementById("results-area");
   if (loading) {
     if (eyebrow) eyebrow.textContent = mode === "search" ? "Searching" : "Your watchlist";
-    heading.textContent = mode === "search" ? `Finding titles like "${searchQuery || ""}"` : "Curating titles";
+    heading.textContent =
+      mode === "search" ? `Finding titles like "${searchQuery || ""}"` : "Curating titles";
   } else if (results.length) {
     if (mode === "search" && searchSeed) {
       if (eyebrow) eyebrow.textContent = "Similar titles";
       heading.textContent = `More like ${getTitle(searchSeed)}`;
+    } else if (mode === "search" && searchConcept) {
+      if (eyebrow) eyebrow.textContent =
+        searchConcept.type === "person"
+          ? "Filmography"
+          : searchConcept.type === "genre"
+          ? "Genre picks"
+          : "Keyword matches";
+      heading.textContent = conceptHeading(searchConcept, searchQuery);
     } else {
       if (eyebrow) eyebrow.textContent = "Your watchlist";
       heading.textContent = `${results.length} matches`;
@@ -384,4 +405,118 @@ export function renderError(message) {
 export function renderRefreshButton({ loading, apiReady }) {
   const btn = document.getElementById("refresh-button");
   btn.disabled = loading || !apiReady;
+}
+
+/* ----------------------------- Discover Hub ----------------------------- */
+
+const DISCOVER_TITLES = {
+  trending: "Trending this week",
+  popular: "Most watched right now",
+  top: "Most liked of all time"
+};
+
+function discoverCardHtml(item) {
+  const poster = imageUrl(item.poster_path, "w342");
+  const rating = Number(item.vote_average || 0).toFixed(1);
+  return `
+    <button
+      class="discover-card"
+      type="button"
+      data-card-id="${escapeHtml(`${item.media_type || "movie"}-${item.id}`)}"
+    >
+      <div class="discover-poster">
+        ${
+          poster
+            ? `<img src="${poster}" alt="${escapeHtml(getTitle(item))} poster" loading="lazy" />`
+            : `<div class="poster-fallback">No poster</div>`
+        }
+        <span class="discover-rating">${iconHtml("Star", 11)} ${rating}</span>
+        <span class="discover-type">${escapeHtml(getMediaLabel(item.media_type || "movie"))}</span>
+      </div>
+      <div class="discover-meta">
+        <strong>${escapeHtml(getTitle(item))}</strong>
+        <span>${escapeHtml(getYear(item) || "—")}</span>
+      </div>
+    </button>
+  `;
+}
+
+function discoverSkeleton() {
+  return `
+    <div class="discover-track">
+      ${Array.from({ length: 8 })
+        .map(() => `<div class="discover-skel"></div>`)
+        .join("")}
+    </div>
+  `;
+}
+
+export function renderDiscoverHub({ tab, items, loading, onSelect, onTabChange }) {
+  const root = document.getElementById("discover-hub");
+  if (!root) return;
+  const area = document.getElementById("discover-area");
+  const title = document.getElementById("discover-title");
+  if (title) title.textContent = DISCOVER_TITLES[tab] || DISCOVER_TITLES.trending;
+
+  // tab active state
+  document.querySelectorAll("#discover-tabs .discover-tab").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.tab === tab);
+  });
+
+  if (!area) return;
+  if (loading) {
+    area.innerHTML = discoverSkeleton();
+    return;
+  }
+  if (!items || !items.length) {
+    area.innerHTML = `<div class="discover-empty">Nothing to show right now.</div>`;
+    return;
+  }
+
+  area.innerHTML = `
+    <div class="discover-track">
+      ${items.slice(0, 20).map(discoverCardHtml).join("")}
+    </div>
+  `;
+  renderIcons(area);
+  area.querySelectorAll(".discover-card").forEach((card) => {
+    card.addEventListener("click", () => {
+      const id = card.dataset.cardId;
+      const item = items.find((r) => `${r.media_type || "movie"}-${r.id}` === id);
+      if (item && onSelect) onSelect(item);
+    });
+  });
+
+  // Wire tab buttons (idempotent — replace listeners)
+  document.querySelectorAll("#discover-tabs .discover-tab").forEach((btn) => {
+    const fresh = btn.cloneNode(true);
+    btn.parentNode.replaceChild(fresh, btn);
+    fresh.addEventListener("click", () => onTabChange && onTabChange(fresh.dataset.tab));
+  });
+  renderIcons(document.getElementById("discover-tabs"));
+}
+
+/* ------------------------------ Sort field ------------------------------ */
+
+export function renderSortField({ sortBy, visible, onChange }) {
+  const wrap = document.getElementById("sort-field");
+  if (!wrap) return;
+  wrap.hidden = !visible;
+  if (!visible) return;
+  const sel = document.getElementById("results-sort");
+  if (!sel) return;
+  sel.innerHTML = sortOptions
+    .map(
+      (o) =>
+        `<option value="${o.value}" ${o.value === sortBy ? "selected" : ""}>${escapeHtml(
+          o.label
+        )}</option>`
+    )
+    .join("");
+  // re-bind change handler (clear old via clone)
+  const fresh = sel.cloneNode(true);
+  sel.parentNode.replaceChild(fresh, sel);
+  fresh.value = sortBy;
+  fresh.addEventListener("change", (e) => onChange && onChange(e.target.value));
+  renderIcons(wrap);
 }

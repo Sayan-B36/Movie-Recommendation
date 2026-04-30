@@ -137,6 +137,14 @@ export const genreNames = {
   10765: "Sci-Fi", 10766: "Soap"
 };
 
+export const sortOptions = [
+  { value: "match", label: "Best match" },
+  { value: "popularity", label: "Most popular" },
+  { value: "rating", label: "Highest rated" },
+  { value: "trending", label: "Trending now" },
+  { value: "year", label: "Newest first" }
+];
+
 export const defaultFilters = {
   mood: "romantic",
   climate: "rainy",
@@ -149,7 +157,8 @@ export const defaultFilters = {
   dubbedOnly: false,
   platform: "",
   minRating: 6.5,
-  region: "IN"
+  region: "IN",
+  sortBy: "match"
 };
 
 export const RESULT_LIMITS = {

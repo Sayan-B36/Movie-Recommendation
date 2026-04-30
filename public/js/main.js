@@ -1,6 +1,15 @@
-import { getMediaDetails, getStatus, imageUrl, searchTitles } from "./api.js";
+import {
+  getMediaDetails,
+  getPopular,
+  getStatus,
+  getTopRated,
+  getTrending,
+  imageUrl,
+  searchTitles
+} from "./api.js";
 import {
   fetchRecommendations,
+  loadMoreConcept,
   loadMoreRecommendations,
   loadMoreSimilar,
   searchByTitle
@@ -18,13 +27,15 @@ import {
 import {
   renderApiPill,
   renderChoiceStack,
+  renderDiscoverHub,
   renderError,
   renderFilters,
   renderRefreshButton,
   renderResults,
   renderRunButton,
   renderSelectionLine,
-  renderShowcase
+  renderShowcase,
+  renderSortField
 } from "./render.js";
 
 /* ---------------- Endless scroll ---------------- */
@@ -43,7 +54,14 @@ async function loadMore() {
 
   let newItems = [];
   try {
-    if (state.mode === "search") {
+    if (state.mode === "search" && state.searchMode === "concept") {
+      newItems = await loadMoreConcept(
+        state.searchQuery,
+        state.filters,
+        state.page,
+        existingIds
+      );
+    } else if (state.mode === "search") {
       newItems = await loadMoreSimilar(
         state.searchSeed,
         state.filters,
@@ -62,7 +80,7 @@ async function loadMore() {
   }
 
   if (newItems.length) {
-    state.results = [...state.results, ...newItems];
+    state.results = [...state.results, ...sortResults(newItems, state.filters.sortBy)];
     state.page += 1;
   } else {
     // No fresh items returned; assume the catalog is exhausted.
@@ -70,6 +88,38 @@ async function loadMore() {
   }
   state.loadingMore = false;
   rerender();
+}
+
+/* ---------------- Sort ---------------- */
+
+function sortResults(items, sortBy) {
+  const arr = [...items];
+  switch (sortBy) {
+    case "popularity":
+      return arr.sort((a, b) => (b.popularity || 0) - (a.popularity || 0));
+    case "rating":
+      return arr.sort((a, b) => {
+        const aR = Number(a.imdbRating) || a.vote_average || 0;
+        const bR = Number(b.imdbRating) || b.vote_average || 0;
+        return bR - aR;
+      });
+    case "trending":
+      // approximate: weight popularity + recent vote count
+      return arr.sort(
+        (a, b) =>
+          (b.popularity || 0) * 0.7 + Math.log10((b.vote_count || 0) + 1) * 5 -
+          ((a.popularity || 0) * 0.7 + Math.log10((a.vote_count || 0) + 1) * 5)
+      );
+    case "year":
+      return arr.sort((a, b) => Number(getYear(b) || 0) - Number(getYear(a) || 0));
+    case "match":
+    default:
+      return arr.sort((a, b) => (b.matchScore || 0) - (a.matchScore || 0));
+  }
+}
+
+function applySortToState() {
+  state.results = sortResults(state.results, state.filters.sortBy);
 }
 
 function observeResultsFooter() {
@@ -112,6 +162,13 @@ function rerender() {
     onOpenFeatured: () => state.results[0] && openModal(state.results[0])
   });
   renderFilters({ filters: state.filters, onChange: handleFilterChange });
+  renderDiscoverHub({
+    tab: state.discover.tab,
+    items: state.discover.items,
+    loading: state.discover.loading,
+    onSelect: openModal,
+    onTabChange: handleDiscoverTabChange
+  });
   renderResults({
     loading: state.loading,
     results: state.results,
@@ -119,13 +176,61 @@ function rerender() {
     mode: state.mode,
     searchQuery: state.searchQuery,
     searchSeed: state.searchSeed,
+    searchConcept: state.searchConcept,
     loadingMore: state.loadingMore,
     canLoadMore: state.canLoadMore,
     onSelect: openModal
   });
+  renderSortField({
+    sortBy: state.filters.sortBy,
+    visible: state.hasSearched && state.results.length > 0,
+    onChange: handleSortChange
+  });
   renderError(state.error);
   renderRefreshButton({ loading: state.loading, apiReady: state.apiReady });
   observeResultsFooter();
+}
+
+function handleSortChange(value) {
+  setFilter("sortBy", value);
+  applySortToState();
+  rerender();
+}
+
+/* ---------------- Discover hub ---------------- */
+
+async function handleDiscoverTabChange(tab) {
+  if (state.discover.tab === tab && state.discover.items.length) return;
+  state.discover.tab = tab;
+  await loadDiscoverTab(tab);
+}
+
+async function loadDiscoverTab(tab) {
+  // Serve from cache if available
+  if (state.discover.cache[tab]?.length) {
+    state.discover.items = state.discover.cache[tab];
+    state.discover.loading = false;
+    rerender();
+    return;
+  }
+  state.discover.loading = true;
+  state.discover.items = [];
+  rerender();
+  try {
+    let data;
+    if (tab === "trending") data = await getTrending("week");
+    else if (tab === "popular") data = await getPopular("movie");
+    else data = await getTopRated("movie");
+    const items = data.results || [];
+    state.discover.cache[tab] = items;
+    state.discover.items = items;
+  } catch (e) {
+    console.warn("discover load failed", e);
+    state.discover.items = [];
+  } finally {
+    state.discover.loading = false;
+    rerender();
+  }
 }
 
 async function openModal(item) {
@@ -171,6 +276,8 @@ async function run() {
   }
   state.mode = "mood";
   state.searchSeed = null;
+  state.searchConcept = null;
+  state.searchMode = "title";
   state.loading = true;
   state.error = "";
   state.hasSearched = true;
@@ -184,7 +291,7 @@ async function run() {
 
   try {
     const finalResults = await fetchRecommendations(state.filters);
-    state.results = finalResults;
+    state.results = sortResults(finalResults, state.filters.sortBy);
     state.canLoadMore = finalResults.length > 0;
   } catch (error) {
     state.results = [];
@@ -218,16 +325,26 @@ async function runSearch(query) {
   renderRefreshButton({ loading: true, apiReady: state.apiReady });
 
   try {
-    const { seed, results } = await searchByTitle(q, state.filters);
+    const { seed, results, mode: searchMode, concept } = await searchByTitle(
+      q,
+      state.filters
+    );
     state.searchSeed = seed;
-    state.results = results;
-    state.canLoadMore = Boolean(seed && results.length);
+    state.searchMode = searchMode || "title";
+    state.searchConcept = concept || null;
+    state.results = sortResults(results, state.filters.sortBy);
+    // Concept results paginate via /api/search?page=N (so even without a seed
+    // we have endless scroll). Title results paginate via /recommendations.
+    state.canLoadMore =
+      results.length > 0 && (state.searchMode === "concept" || Boolean(seed));
     if (!results.length) {
       state.error = `No matches found for "${q}".`;
     }
   } catch (error) {
     state.results = [];
     state.searchSeed = null;
+    state.searchConcept = null;
+    state.searchMode = "title";
     state.canLoadMore = false;
     state.error = error?.message || "Search failed.";
   } finally {
@@ -379,6 +496,11 @@ async function init() {
     state.error = "Could not reach the MoodFlix backend.";
   }
   rerender();
+
+  // Kick off discover hub once we know TMDB is reachable.
+  if (state.apiReady) {
+    loadDiscoverTab(state.discover.tab);
+  }
 }
 
 if (document.readyState === "loading") {
