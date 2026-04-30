@@ -158,6 +158,32 @@ const GENRE_KEYWORD_MAP = {
 
 const SUFFIX_RE = /\b(movies?|films?|cinema|series|shows?|tv|netflix|prime)\b/g;
 
+/**
+ * Alias map for common franchise abbreviations. TMDB's keyword search
+ * returns sub-franchises first (e.g. "dc" -> "tomorrowverse (dc)") which
+ * give very narrow results; mapping to the canonical franchise keyword
+ * gives the wide list users expect.
+ */
+const QUERY_ALIASES = {
+  dcu: "dc extended universe",
+  dceu: "dc extended universe",
+  dc: "dc extended universe",
+  mcu: "marvel cinematic universe",
+  marvel: "marvel cinematic universe",
+  starwars: "star wars",
+  "star wars": "star wars",
+  harrypotter: "harry potter",
+  hp: "harry potter",
+  fastandfurious: "fast and the furious",
+  potterhead: "harry potter",
+  jamesbond: "james bond",
+  bond: "james bond",
+  jurassic: "jurassic park",
+  lotr: "lord of the rings",
+  lordoftherings: "lord of the rings",
+  hobbit: "the hobbit"
+};
+
 function cleanQuery(q) {
   return q
     .toLowerCase()
@@ -165,6 +191,45 @@ function cleanQuery(q) {
     .replace(/[^\p{L}\p{N}\s-]/gu, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+/**
+ * Out of the keywords returned by /search/keyword, pick the one whose
+ * name best matches the lookup. Priority:
+ *   1. Exact name match
+ *   2. Name starts with lookup
+ *   3. Shortest name containing the lookup (most general franchise)
+ *   4. First result
+ */
+function bestKeyword(keywords, lookup) {
+  if (!keywords.length) return null;
+  const exact = keywords.find((k) => k.name.toLowerCase() === lookup);
+  if (exact) return exact;
+  const startsWith = keywords.find((k) => k.name.toLowerCase().startsWith(lookup));
+  if (startsWith) return startsWith;
+  const containing = keywords
+    .filter((k) => k.name.toLowerCase().includes(lookup))
+    .sort((a, b) => a.name.length - b.name.length);
+  if (containing.length) return containing[0];
+  return keywords[0];
+}
+
+/**
+ * Combined credits include lots of guest appearances (talk shows, awards,
+ * "behind the scenes" docs) tagged as character "Self". Strip those plus
+ * News (10763) and Talk (10767) so we surface real films/series.
+ */
+function isWorthwhilePersonCredit(credit) {
+  const character = (credit.character || "").toLowerCase();
+  if (character.startsWith("self") || character === "himself" || character === "herself") {
+    // Allow if their job is on the crew side (director, writer, producer)
+    if (!credit.job) return false;
+  }
+  const genres = credit.genre_ids || [];
+  if (genres.includes(10763) || genres.includes(10767)) return false; // News, Talk
+  // Drop low-credibility items (TMDB sometimes lists rumours / shorts with no metadata)
+  if ((credit.vote_count || 0) < 25 && (credit.popularity || 0) < 5) return false;
+  return true;
 }
 
 async function discoverByGenre(genreId, mediaType, page) {
@@ -188,7 +253,9 @@ async function smartSearch(rawQuery, page) {
 
   const cleaned = cleanQuery(q);
   const hadSuffix = cleaned !== q.toLowerCase().replace(/[^\p{L}\p{N}\s-]/gu, " ").replace(/\s+/g, " ").trim();
-  const lookup = cleaned || q.toLowerCase();
+  const rawLookup = cleaned || q.toLowerCase();
+  // Apply franchise alias (e.g. "dcu" -> "dc extended universe")
+  const lookup = QUERY_ALIASES[rawLookup] || rawLookup;
 
   // 1) Direct genre map (e.g. "horror", "horror movies", "comedy")
   if (GENRE_KEYWORD_MAP[lookup]) {
@@ -277,12 +344,12 @@ async function smartSearch(rawQuery, page) {
   });
 
   // 4) Keyword path - check for a TMDB keyword whose name matches
-  //    (e.g. "marvel" -> keyword "marvel comic"; "ghost" -> keyword "ghost").
+  //    (e.g. "marvel" -> "marvel cinematic universe"; "ghost" -> "ghost").
   const keywords = (keywordData.results || []).filter((k) => {
     const name = k.name.toLowerCase();
     return name === lookup || name.includes(lookup) || lookup.includes(name);
   });
-  const topKeyword = keywords[0];
+  const topKeyword = bestKeyword(keywords, lookup);
 
   // Concept routes win when:
   //  - the title hit isn't strong, AND
@@ -296,17 +363,20 @@ async function smartSearch(rawQuery, page) {
     const list = credits
       ? (credits.cast || [])
           .concat(credits.crew || [])
-          .filter((c) => (c.media_type === "movie" || c.media_type === "tv"))
+          .filter((c) => c.media_type === "movie" || c.media_type === "tv")
           .filter((c) => c.poster_path || c.backdrop_path)
+          .filter(isWorthwhilePersonCredit)
       : [];
-    // Dedupe (people can appear in both cast & crew)
-    const seen = new Set();
-    const uniq = list.filter((c) => {
-      const k = `${c.media_type}-${c.id}`;
-      if (seen.has(k)) return false;
-      seen.add(k);
-      return true;
+    // Dedupe (people can appear in both cast & crew). Prefer the entry
+    // with a `job` (crew) when both exist - that's how directors/writers
+    // get attributed correctly even if they cameo'd as themselves.
+    const seen = new Map();
+    list.forEach((c) => {
+      const key = `${c.media_type}-${c.id}`;
+      const existing = seen.get(key);
+      if (!existing || (c.job && !existing.job)) seen.set(key, c);
     });
+    const uniq = Array.from(seen.values());
     uniq.sort((a, b) => (b.popularity || 0) - (a.popularity || 0));
     if (uniq.length) {
       const start = (page - 1) * 20;
@@ -319,13 +389,14 @@ async function smartSearch(rawQuery, page) {
   }
 
   if (!strongTitle && topKeyword) {
-    // Combine top 1-3 matching keywords for richer results
-    const ids = keywords.slice(0, 3).map((k) => k.id).join(",");
+    // Use the single best-matching keyword. Combining multiple keywords
+    // with comma is OR-semantics in TMDB and produced noisy results
+    // (e.g. "marvel" mixed unrelated marvel-tagged comedies in).
     const [movieData, tvData] = await Promise.all([
       tmdbGet(
         "/discover/movie",
         {
-          with_keywords: ids,
+          with_keywords: topKeyword.id,
           sort_by: "popularity.desc",
           "vote_count.gte": 30,
           include_adult: "false",
@@ -337,7 +408,7 @@ async function smartSearch(rawQuery, page) {
       tmdbGet(
         "/discover/tv",
         {
-          with_keywords: ids,
+          with_keywords: topKeyword.id,
           sort_by: "popularity.desc",
           "vote_count.gte": 30,
           include_adult: "false",
