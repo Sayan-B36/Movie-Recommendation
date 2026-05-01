@@ -888,9 +888,26 @@ app.get("/api/discover-list", async (req, res) => {
 
   try {
     const { path, params, filterAfter } = buildDiscoverRequest(list, mediaType, industry);
-    let results = await fetchPaged(path, params, DISCOVER_PAGES, mediaType, 1000 * 60 * 30);
+    // Upcoming: only fetch the first 3 pages. TMDB sorts by popularity.desc
+    // so anything past page ~3 is long-tail noise (unreleased indie shorts
+    // with popularity < 1) which the user perceives as "no hyped movies".
+    const pagesForList = list === "upcoming" ? [1, 2, 3] : DISCOVER_PAGES;
+    let results = await fetchPaged(path, params, pagesForList, mediaType, 1000 * 60 * 30);
     if (filterAfter) {
       results = results.filter((r) => r.original_language === filterAfter);
+    }
+
+    // Upcoming relevance floor: drop items whose popularity is far below
+    // the top item. Unreleased films have vote_count=0, so popularity is
+    // the only ranking signal we have. The relative floor adapts to each
+    // industry (Bollywood top ~4, Hollywood top ~190) without hard-coding.
+    if (list === "upcoming" && results.length > 0) {
+      const top = Math.max(...results.map((r) => Number(r.popularity) || 0));
+      const floor = Math.max(0.6, top * 0.02);
+      const filtered = results.filter((r) => (Number(r.popularity) || 0) >= floor);
+      // Keep at least 20 items so the list never feels empty.
+      if (filtered.length >= 20) results = filtered;
+      else results = results.slice(0, Math.max(20, filtered.length));
     }
 
     // Fallback: trending + non-default industry can return very few items
