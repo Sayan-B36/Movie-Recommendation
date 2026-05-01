@@ -78,7 +78,10 @@ async function loadMore() {
   }
 
   if (newItems.length) {
-    state.results = [...state.results, ...sortResults(newItems, state.filters.sortBy)];
+    // Re-order the merged list so franchise members from the new page
+    // slot next to existing parts (Iron Man 2 lands after Iron Man 1
+    // even when it arrives via load-more).
+    state.results = orderResults([...state.results, ...newItems], state.filters.sortBy);
     state.page += 1;
   } else {
     // No fresh items returned; assume the catalog is exhausted.
@@ -116,8 +119,76 @@ function sortResults(items, sortBy) {
   }
 }
 
+/**
+ * Pull movies that belong to the same TMDB collection (Marvel, Harry
+ * Potter, Fast & Furious, Conjuring, etc.) into a contiguous block,
+ * placed at the earliest member's current position, ordered by release
+ * date ascending so the user sees Part 1 -> Part 2 -> Part 3 instead
+ * of a random middle entry. Single-member collections are left alone.
+ * TV series are skipped because TMDB models seasons inside one show
+ * (the modal already shows seasons sequentially).
+ */
+function groupFranchises(items) {
+  if (!Array.isArray(items) || items.length < 2) return items;
+
+  const groups = new Map(); // collectionId -> { firstIndex, members: [] }
+  items.forEach((item, idx) => {
+    if (item.media_type !== "movie") return;
+    const cid = item.detail?.belongs_to_collection?.id;
+    if (!cid) return;
+    if (!groups.has(cid)) {
+      groups.set(cid, { firstIndex: idx, members: [] });
+    }
+    groups.get(cid).members.push(item);
+  });
+
+  // Drop groups with fewer than 2 members - nothing to "sequence".
+  for (const [cid, g] of groups) {
+    if (g.members.length < 2) {
+      groups.delete(cid);
+    } else {
+      g.members.sort((a, b) => {
+        const ay = a.release_date || a.first_air_date || "9999-99-99";
+        const by = b.release_date || b.first_air_date || "9999-99-99";
+        return ay.localeCompare(by);
+      });
+    }
+  }
+
+  if (groups.size === 0) return items;
+
+  const out = [];
+  const placed = new Set();
+  items.forEach((item, idx) => {
+    const key = `${item.media_type}-${item.id}`;
+    if (placed.has(key)) return;
+    const cid = item.detail?.belongs_to_collection?.id;
+    if (cid && groups.has(cid)) {
+      // Only emit the whole ordered group when we reach its earliest
+      // member; later members get skipped via the placed set.
+      if (groups.get(cid).firstIndex === idx) {
+        for (const member of groups.get(cid).members) {
+          const k = `${member.media_type}-${member.id}`;
+          if (!placed.has(k)) {
+            out.push(member);
+            placed.add(k);
+          }
+        }
+      }
+      return;
+    }
+    out.push(item);
+    placed.add(key);
+  });
+  return out;
+}
+
+function orderResults(items, sortBy) {
+  return groupFranchises(sortResults(items, sortBy));
+}
+
 function applySortToState() {
-  state.results = sortResults(state.results, state.filters.sortBy);
+  state.results = orderResults(state.results, state.filters.sortBy);
 }
 
 function observeResultsFooter() {
@@ -306,7 +377,7 @@ async function run() {
 
   try {
     const finalResults = await fetchRecommendations(state.filters);
-    state.results = sortResults(finalResults, state.filters.sortBy);
+    state.results = orderResults(finalResults, state.filters.sortBy);
     state.canLoadMore = finalResults.length > 0;
   } catch (error) {
     state.results = [];
@@ -347,7 +418,7 @@ async function runSearch(query) {
     state.searchSeed = seed;
     state.searchMode = searchMode || "title";
     state.searchConcept = concept || null;
-    state.results = sortResults(results, state.filters.sortBy);
+    state.results = orderResults(results, state.filters.sortBy);
     // Concept results paginate via /api/search?page=N (so even without a seed
     // we have endless scroll). Title results paginate via /recommendations.
     state.canLoadMore =
