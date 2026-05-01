@@ -9,7 +9,10 @@
   --text: #f7f2ea;
   --muted: #aaa5a0;
   --faint: #736f72;
-  --gold: #ffd35a;
+  --gold: #e6b25e;
+  --gold-soft: #fbe4a3;
+  --gold-deep: #9a5a2c;
+  --brand-grad: linear-gradient(135deg, #fbe4a3 0%, #e6b25e 48%, #9a5a2c 100%);
   --coral: #ff5d4d;
   --cyan: #57d8ff;
   --green: #61d394;
@@ -134,20 +137,71 @@ a {
 }
 
 .brand {
-  gap: 0.7rem;
-  font-size: 1.2rem;
-  font-weight: 800;
+  gap: 0.85rem;
+  text-decoration: none;
+  color: var(--text);
+  position: relative;
+  padding: 0.15rem 0.1rem;
+  transition: transform 220ms ease;
+}
+
+.brand:hover {
+  transform: translateY(-1px);
+}
+
+.brand-logo {
+  display: block;
+  flex-shrink: 0;
+  filter: drop-shadow(0 8px 20px rgba(230, 178, 94, 0.32))
+    drop-shadow(0 0 1px rgba(0, 0, 0, 0.6));
+  transition: filter 240ms ease, transform 240ms ease;
+}
+
+.brand:hover .brand-logo {
+  filter: drop-shadow(0 10px 26px rgba(251, 228, 163, 0.45))
+    drop-shadow(0 0 1px rgba(0, 0, 0, 0.6));
+  transform: rotate(-1deg);
 }
 
 .brand-mark {
   width: 2.25rem;
   height: 2.25rem;
   justify-content: center;
-  border: 1px solid rgba(255, 211, 90, 0.36);
-  border-radius: 8px;
+  border: 1px solid rgba(230, 178, 94, 0.36);
+  border-radius: 10px;
   color: var(--gold);
-  background: rgba(255, 211, 90, 0.08);
-  box-shadow: 0 14px 38px rgba(255, 211, 90, 0.12);
+  background: rgba(230, 178, 94, 0.08);
+  box-shadow: 0 14px 38px rgba(230, 178, 94, 0.14);
+}
+
+.brand-wordmark {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  line-height: 1;
+  gap: 0.32rem;
+}
+
+.brand-wordmark strong {
+  font-family: "Cinzel", "Bodoni Moda", "Playfair Display", Georgia, serif;
+  font-weight: 600;
+  font-size: 1.45rem;
+  letter-spacing: 0.22em;
+  background: var(--brand-grad);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.35);
+}
+
+.brand-wordmark em {
+  font-style: normal;
+  font-family: Inter, sans-serif;
+  font-weight: 500;
+  font-size: 0.62rem;
+  letter-spacing: 0.42em;
+  text-transform: uppercase;
+  color: rgba(230, 178, 94, 0.78);
 }
 
 .topbar-actions {
@@ -188,7 +242,7 @@ a {
 }
 
 .icon-button:hover {
-  border-color: rgba(255, 211, 90, 0.45);
+  border-color: rgba(230, 178, 94, 0.45);
   background: rgba(255, 255, 255, 0.09);
   transform: translateY(-1px);
 }
@@ -294,7 +348,7 @@ h1 {
 
 .choice-chip.active {
   color: #14100a;
-  border-color: rgba(255, 211, 90, 0.75);
+  border-color: rgba(230, 178, 94, 0.75);
   background: linear-gradient(135deg, var(--gold), #ff9f5b);
   box-shadow: 0 13px 32px rgba(255, 174, 74, 0.2);
 }
@@ -321,7 +375,7 @@ h1 {
 
 .primary-button {
   padding: 0.78rem 1rem;
-  border: 1px solid rgba(255, 211, 90, 0.7);
+  border: 1px solid rgba(230, 178, 94, 0.7);
   background: linear-gradient(135deg, var(--gold), var(--coral));
   color: #170e09;
   font-weight: 900;
@@ -435,7 +489,7 @@ h1 {
   border-radius: 8px;
   background:
     linear-gradient(145deg, rgba(255, 255, 255, 0.18), transparent 48%),
-    linear-gradient(35deg, rgba(255, 211, 90, 0.35), rgba(155, 108, 255, 0.22), rgba(87, 216, 255, 0.28));
+    linear-gradient(35deg, rgba(230, 178, 94, 0.35), rgba(155, 108, 255, 0.22), rgba(87, 216, 255, 0.28));
   box-shadow: 0 28px 80px rgba(0, 0, 0, 0.44);
 }
 
@@ -473,7 +527,7 @@ h1 {
   z-index: -1;
   background:
     linear-gradient(to top, rgba(7, 7, 10, 0.95), transparent 70%),
-    linear-gradient(130deg, rgba(255, 211, 90, 0.13), transparent 35%);
+    linear-gradient(130deg, rgba(230, 178, 94, 0.13), transparent 35%);
 }
 
 .featured-content {
@@ -540,9 +594,9 @@ h1 {
 }
 
 .search-form:focus-within {
-  border-color: rgba(255, 211, 90, 0.55);
+  border-color: rgba(230, 178, 94, 0.55);
   background: rgba(255, 255, 255, 0.09);
-  box-shadow: 0 0 0 4px rgba(255, 211, 90, 0.12);
+  box-shadow: 0 0 0 4px rgba(230, 178, 94, 0.12);
 }
 
 .search-form .search-icon {
@@ -656,7 +710,7 @@ h1 {
   width: 36px;
   height: 54px;
   border-radius: 5px;
-  background: linear-gradient(145deg, rgba(255, 211, 90, 0.25), rgba(155, 108, 255, 0.2));
+  background: linear-gradient(145deg, rgba(230, 178, 94, 0.25), rgba(155, 108, 255, 0.2));
   flex-shrink: 0;
 }
 
@@ -730,7 +784,7 @@ h1 {
 
 .select-field:hover,
 .select-field:focus-within {
-  border-color: rgba(255, 211, 90, 0.45);
+  border-color: rgba(230, 178, 94, 0.45);
   background: rgba(255, 255, 255, 0.07);
   transform: translateY(-1px);
 }
@@ -819,7 +873,7 @@ h1 {
   border-radius: 50%;
   background: var(--gold);
   cursor: pointer;
-  box-shadow: 0 4px 12px rgba(255, 211, 90, 0.45);
+  box-shadow: 0 4px 12px rgba(230, 178, 94, 0.45);
 }
 
 .range-field input[type="range"]::-moz-range-thumb {
@@ -864,7 +918,7 @@ h1 {
 }
 
 .ghost-button:hover:not(:disabled) {
-  border-color: rgba(255, 211, 90, 0.45);
+  border-color: rgba(230, 178, 94, 0.45);
   background: rgba(255, 255, 255, 0.08);
 }
 
@@ -987,7 +1041,7 @@ h1 {
 }
 
 .movie-card:hover {
-  border-color: rgba(255, 211, 90, 0.45);
+  border-color: rgba(230, 178, 94, 0.45);
   box-shadow: 0 24px 56px rgba(0, 0, 0, 0.55);
 }
 
@@ -1018,7 +1072,7 @@ h1 {
   height: 100%;
   color: var(--faint);
   font-size: 0.85rem;
-  background: linear-gradient(145deg, rgba(255, 211, 90, 0.12), rgba(155, 108, 255, 0.12));
+  background: linear-gradient(145deg, rgba(230, 178, 94, 0.12), rgba(155, 108, 255, 0.12));
 }
 
 .media-badge,
@@ -1463,7 +1517,7 @@ h1 {
   height: 84px;
   border-radius: 50%;
   overflow: hidden;
-  background: linear-gradient(145deg, rgba(255, 211, 90, 0.18), rgba(155, 108, 255, 0.25));
+  background: linear-gradient(145deg, rgba(230, 178, 94, 0.18), rgba(155, 108, 255, 0.25));
   border: 2px solid rgba(255, 255, 255, 0.08);
   box-shadow: 0 10px 24px rgba(0, 0, 0, 0.45);
   display: flex;
@@ -1474,7 +1528,7 @@ h1 {
 
 .cast-card:hover .cast-avatar {
   transform: translateY(-3px) scale(1.04);
-  border-color: rgba(255, 211, 90, 0.55);
+  border-color: rgba(230, 178, 94, 0.55);
 }
 
 .cast-avatar img {
@@ -1565,14 +1619,14 @@ h1 {
 
 .season-card:hover {
   transform: translateY(-3px);
-  border-color: rgba(255, 211, 90, 0.45);
+  border-color: rgba(230, 178, 94, 0.45);
   background: rgba(255, 255, 255, 0.06);
 }
 
 .season-card.active {
-  border-color: rgba(255, 211, 90, 0.85);
-  background: rgba(255, 211, 90, 0.1);
-  box-shadow: 0 0 0 3px rgba(255, 211, 90, 0.18);
+  border-color: rgba(230, 178, 94, 0.85);
+  background: rgba(230, 178, 94, 0.1);
+  box-shadow: 0 0 0 3px rgba(230, 178, 94, 0.18);
   transform: translateY(-3px);
 }
 
@@ -1676,7 +1730,7 @@ h1 {
 }
 
 .episode-row:hover {
-  border-color: rgba(255, 211, 90, 0.35);
+  border-color: rgba(230, 178, 94, 0.35);
   background: rgba(255, 255, 255, 0.05);
 }
 
@@ -1686,7 +1740,7 @@ h1 {
   width: 100%;
   border-radius: 8px;
   overflow: hidden;
-  background: linear-gradient(145deg, rgba(255, 211, 90, 0.12), rgba(155, 108, 255, 0.18));
+  background: linear-gradient(145deg, rgba(230, 178, 94, 0.12), rgba(155, 108, 255, 0.18));
 }
 
 .episode-thumb img {
@@ -1816,7 +1870,7 @@ h1 {
   aspect-ratio: 2 / 3;
   border-radius: 8px;
   overflow: hidden;
-  background: linear-gradient(145deg, rgba(255, 211, 90, 0.12), rgba(155, 108, 255, 0.18));
+  background: linear-gradient(145deg, rgba(230, 178, 94, 0.12), rgba(155, 108, 255, 0.18));
 }
 
 .season-poster img {
@@ -1934,7 +1988,7 @@ h1 {
 
 .similar-card:hover {
   transform: translateY(-3px);
-  border-color: rgba(255, 211, 90, 0.45);
+  border-color: rgba(230, 178, 94, 0.45);
   background: rgba(255, 255, 255, 0.06);
 }
 
@@ -1953,7 +2007,7 @@ h1 {
   width: 100%;
   aspect-ratio: 2 / 3;
   border-radius: 8px;
-  background: linear-gradient(145deg, rgba(255, 211, 90, 0.12), rgba(155, 108, 255, 0.18));
+  background: linear-gradient(145deg, rgba(230, 178, 94, 0.12), rgba(155, 108, 255, 0.18));
   color: var(--faint);
   font-size: 0.78rem;
 }
@@ -2160,7 +2214,7 @@ h1 {
   font-weight: 700;
   background: rgba(0, 0, 0, 0.65);
   color: var(--gold);
-  border: 1px solid rgba(255, 211, 90, 0.3);
+  border: 1px solid rgba(230, 178, 94, 0.3);
   border-radius: 999px;
   backdrop-filter: blur(8px);
 }
@@ -2511,8 +2565,8 @@ h1 {
     font-size: 1rem;
   }
 
-  /* Brand wordmark hidden on tiny screens; mark stays */
-  .brand span:not(.brand-mark) {
+  /* Brand wordmark hidden on tiny screens; logo mark stays */
+  .brand-wordmark {
     display: none;
   }
 
