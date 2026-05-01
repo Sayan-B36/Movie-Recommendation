@@ -840,13 +840,28 @@ function buildDiscoverRequest(list, mediaType, industry) {
   }
 
   if (list === "upcoming") {
+    // Window: from today up to 18 months out. Sort by popularity so
+    // big-budget anticipated releases (Avatar 3, Dune 3, ...) surface
+    // first instead of the thousand obscure indie shorts releasing
+    // this week with zero votes/popularity.
+    const eighteenMonthsOut = new Date(Date.now() + 540 * 24 * 60 * 60 * 1000)
+      .toISOString()
+      .slice(0, 10);
     return {
       path: `/discover/${mediaType}`,
       params: {
-        sort_by: `${dateField}.asc`,
+        sort_by: "popularity.desc",
         [`${dateField}.gte`]: today,
+        [`${dateField}.lte`]: eighteenMonthsOut,
         include_adult: "false",
-        ...(isMovie ? { include_video: "false" } : {}),
+        ...(isMovie
+          ? {
+              include_video: "false",
+              // Theatrical (3) + limited theatrical (2). Keeps actual
+              // films and drops direct-to-streaming oddities.
+              with_release_type: "2|3"
+            }
+          : {}),
         ...langParam
       }
     };
