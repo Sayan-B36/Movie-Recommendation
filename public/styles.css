@@ -141,7 +141,6 @@ a {
 .brand {
   display: inline-flex;
   align-items: center;
-  gap: 0.05rem;
   text-decoration: none;
   position: relative;
   padding: 0.15rem 0.1rem;
@@ -154,47 +153,19 @@ a {
   filter: brightness(1.08);
 }
 
-/* Premium gold "M" monogram, two pillars with subtle splayed feet (like
-   Netflix's N base) plus crossing diagonals. The receding diagonal uses
-   a deeper gold so the V reads as a folded ribbon, not flat paint.
-   Height is matched to the OODFLIX cap-height so the M sits inline. */
-.brand-monogram {
-  display: block;
-  flex-shrink: 0;
-  width: auto;
-  height: 1.75rem;
-  margin-right: 0.04em;
-  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.6))
-    drop-shadow(0 0 8px rgba(230, 178, 94, 0.18));
-  transition: filter 240ms ease;
-}
-
-.brand:hover .brand-monogram {
-  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.6))
-    drop-shadow(0 0 12px rgba(251, 228, 163, 0.32));
-}
-
+/* Flat Netflix-style wordmark: bold condensed type, solid theme color,
+   tight letter-spacing, single subtle depth shadow at the base of the
+   letters - that's the entire premium look, no extra ornamentation. */
 .brand-wordmark {
   font-family: "Bebas Neue", "Oswald", "Arial Narrow", Impact, sans-serif;
   font-weight: 400;
-  font-size: 1.85rem;
-  letter-spacing: 0.025em;
+  font-size: 2rem;
+  letter-spacing: 0.015em;
   text-transform: uppercase;
-  background: linear-gradient(180deg, #fbe4a3 0%, #e6b25e 50%, #c08a3e 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  /* Subtle premium edge: thin warm halo + crisp dark hairline. No bloom. */
+  color: var(--gold);
   text-shadow:
     0 1px 0 rgba(0, 0, 0, 0.55),
-    0 0 6px rgba(230, 178, 94, 0.18);
-  transition: text-shadow 240ms ease;
-}
-
-.brand:hover .brand-wordmark {
-  text-shadow:
-    0 1px 0 rgba(0, 0, 0, 0.55),
-    0 0 10px rgba(251, 228, 163, 0.28);
+    0 2px 4px rgba(0, 0, 0, 0.4);
 }
 
 /* Legacy class - retained as no-op to avoid stale references. */
@@ -2564,12 +2535,9 @@ h1 {
   }
 
   /* Brand shrinks on tiny screens but stays visible. */
-  .brand-monogram {
-    height: 1.4rem;
-  }
   .brand-wordmark {
     font-size: 1.5rem;
-    letter-spacing: 0.02em;
+    letter-spacing: 0.012em;
   }
 
   /* Two-column movie grid */
