@@ -1,5 +1,6 @@
 import { iconHtml, renderIcons } from "./icons.js";
 import { imageUrl } from "./api.js";
+import { enhanceAllSelects } from "./custom-select.js";
 import {
   contentTypeOptions,
   discoverIndustryOptions,
@@ -215,6 +216,7 @@ export function renderFilters({ filters, onChange }) {
   });
   const toggle = root.querySelector('button[data-filter="dubbedOnly"]');
   toggle.addEventListener("click", () => onChange("dubbedOnly", !filters.dubbedOnly));
+  enhanceAllSelects(root);
 }
 
 /* -------------------------------- Results --------------------------------- */
@@ -498,6 +500,7 @@ function buildDiscoverShell(root, mediaType) {
     <div class="discover-area" data-discover-area aria-live="polite"></div>
   `;
   renderIcons(root);
+  enhanceAllSelects(root);
   root.dataset.shellReady = "1";
 }
 
@@ -616,4 +619,5 @@ export function renderSortField({ sortBy, visible, onChange }) {
   fresh.value = sortBy;
   fresh.addEventListener("change", (e) => onChange && onChange(e.target.value));
   renderIcons(wrap);
+  enhanceAllSelects(wrap);
 }
