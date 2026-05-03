@@ -24,7 +24,35 @@
 
     <header class="topbar">
       <a class="brand" href="/" aria-label="MoodFlix home">
-        <span class="brand-wordmark">MOODFLIX</span>
+        <svg
+          class="brand-monogram"
+          viewBox="0 0 120 116"
+          aria-hidden="true"
+          focusable="false"
+        >
+          <defs>
+            <linearGradient id="mf-front" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#fbe4a3" />
+              <stop offset="55%" stop-color="#e6b25e" />
+              <stop offset="100%" stop-color="#c08a3e" />
+            </linearGradient>
+            <linearGradient id="mf-back" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#a07535" />
+              <stop offset="100%" stop-color="#5e3e1a" />
+            </linearGradient>
+          </defs>
+          <!-- Right diagonal: back face (deeper gold) rendered first for the fold effect -->
+          <path d="M 88 6 L 74 6 L 45 110 L 52 110 Z" fill="url(#mf-back)" />
+          <!-- Left pillar with splayed foot -->
+          <path d="M 14 6 L 30 6 L 30 92 L 38 110 L 0 110 L 14 92 Z" fill="url(#mf-front)" />
+          <!-- Right pillar with splayed foot -->
+          <path d="M 88 6 L 104 6 L 104 92 L 118 110 L 80 110 L 88 92 Z" fill="url(#mf-front)" />
+          <!-- Left diagonal: front face -->
+          <path d="M 30 6 L 44 6 L 66 110 L 52 110 Z" fill="url(#mf-front)" />
+        </svg>
+        <span class="brand-wordmark" aria-label="OODFLIX">
+          <span class="bw-letter">O</span><span class="bw-letter">O</span><span class="bw-letter">D</span><span class="bw-letter">F</span><span class="bw-letter">L</span><span class="bw-letter">I</span><span class="bw-letter">X</span>
+        </span>
       </a>
       <div class="topbar-actions">
         <form id="search-form" class="search-form" role="search" autocomplete="off">
