@@ -11,7 +11,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700;800&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700&family=Inter:wght@400;500;600;700;800&display=swap"
       rel="stylesheet"
     />
     <link rel="stylesheet" href="/styles.css" />
@@ -25,33 +25,43 @@
     <header class="topbar">
       <a class="brand" href="/" aria-label="MoodFlix home">
         <svg
-          class="brand-monogram"
-          viewBox="0 0 120 116"
+          class="brand-logo"
+          viewBox="0 0 64 64"
+          width="44"
+          height="44"
           aria-hidden="true"
           focusable="false"
         >
           <defs>
-            <linearGradient id="mf-front" x1="0" y1="0" x2="0" y2="1">
+            <linearGradient id="mf-grad" x1="0" y1="0" x2="1" y2="1">
               <stop offset="0%" stop-color="#fbe4a3" />
-              <stop offset="55%" stop-color="#e6b25e" />
-              <stop offset="100%" stop-color="#c08a3e" />
+              <stop offset="45%" stop-color="#e6b25e" />
+              <stop offset="100%" stop-color="#9a5a2c" />
             </linearGradient>
-            <linearGradient id="mf-back" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stop-color="#a07535" />
-              <stop offset="100%" stop-color="#5e3e1a" />
+            <linearGradient id="mf-grad-soft" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="rgba(255,255,255,0.08)" />
+              <stop offset="100%" stop-color="rgba(0,0,0,0.55)" />
             </linearGradient>
           </defs>
-          <!-- Right diagonal: back face (deeper gold) rendered first for the fold effect -->
-          <path d="M 88 6 L 74 6 L 45 110 L 52 110 Z" fill="url(#mf-back)" />
-          <!-- Left pillar with splayed foot -->
-          <path d="M 14 6 L 30 6 L 30 92 L 38 110 L 0 110 L 14 92 Z" fill="url(#mf-front)" />
-          <!-- Right pillar with splayed foot -->
-          <path d="M 88 6 L 104 6 L 104 92 L 118 110 L 80 110 L 88 92 Z" fill="url(#mf-front)" />
-          <!-- Left diagonal: front face -->
-          <path d="M 30 6 L 44 6 L 66 110 L 52 110 Z" fill="url(#mf-front)" />
+          <rect
+            x="3"
+            y="3"
+            width="58"
+            height="58"
+            rx="14"
+            fill="url(#mf-grad-soft)"
+            stroke="url(#mf-grad)"
+            stroke-width="1.6"
+          />
+          <path
+            d="M14 46 V18 L22 18 L32 33 L42 18 L50 18 V46 H44 V27 L34 41 H30 L20 27 V46 Z"
+            fill="url(#mf-grad)"
+          />
+          <circle cx="32" cy="52" r="1.6" fill="url(#mf-grad)" />
         </svg>
-        <span class="brand-wordmark" aria-label="OODFLIX">
-          <span class="bw-letter">O</span><span class="bw-letter">O</span><span class="bw-letter">D</span><span class="bw-letter">F</span><span class="bw-letter">L</span><span class="bw-letter">I</span><span class="bw-letter">X</span>
+        <span class="brand-wordmark">
+          <strong>MOODFLIX</strong>
+          <em>Cinematic Picks</em>
         </span>
       </a>
       <div class="topbar-actions">
