@@ -8,12 +8,6 @@
       content="MoodFlix recommends movies and series by mood, weather, time, occasion, language, dubbed preference, and streaming platform."
     />
     <title>MoodFlix | Movie Recommendation</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700&family=Inter:wght@400;500;600;700;800&display=swap"
-      rel="stylesheet"
-    />
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
@@ -23,47 +17,10 @@
     </div>
 
     <header class="topbar">
-      <a class="brand" href="/" aria-label="MoodFlix home">
-        <svg
-          class="brand-logo"
-          viewBox="0 0 64 64"
-          width="44"
-          height="44"
-          aria-hidden="true"
-          focusable="false"
-        >
-          <defs>
-            <linearGradient id="mf-grad" x1="0" y1="0" x2="1" y2="1">
-              <stop offset="0%" stop-color="#fbe4a3" />
-              <stop offset="45%" stop-color="#e6b25e" />
-              <stop offset="100%" stop-color="#9a5a2c" />
-            </linearGradient>
-            <linearGradient id="mf-grad-soft" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stop-color="rgba(255,255,255,0.08)" />
-              <stop offset="100%" stop-color="rgba(0,0,0,0.55)" />
-            </linearGradient>
-          </defs>
-          <rect
-            x="3"
-            y="3"
-            width="58"
-            height="58"
-            rx="14"
-            fill="url(#mf-grad-soft)"
-            stroke="url(#mf-grad)"
-            stroke-width="1.6"
-          />
-          <path
-            d="M14 46 V18 L22 18 L32 33 L42 18 L50 18 V46 H44 V27 L34 41 H30 L20 27 V46 Z"
-            fill="url(#mf-grad)"
-          />
-          <circle cx="32" cy="52" r="1.6" fill="url(#mf-grad)" />
-        </svg>
-        <span class="brand-wordmark">
-          <strong>MOODFLIX</strong>
-          <em>Cinematic Picks</em>
-        </span>
-      </a>
+      <div class="brand">
+        <span class="brand-mark" data-icon="Film" data-size="20"></span>
+        <span>MoodFlix</span>
+      </div>
       <div class="topbar-actions">
         <form id="search-form" class="search-form" role="search" autocomplete="off">
           <span class="search-icon" data-icon="Search" data-size="16"></span>
