@@ -54,29 +54,37 @@ export function enhanceSelect(select) {
     });
   }
 
-  function positionPanel() {
-    // Pin the panel to the host's viewport coordinates so it floats above
-    // every ancestor backdrop-filter / overflow / stacking context.
+  // Flip direction is decided once at open time (not on every scroll
+  // event) so the panel doesn't jitter / re-animate mid-scroll.
+  let flipUp = false;
+
+  function decideFlipDirection() {
     const rect = host.getBoundingClientRect();
     const vpH = window.innerHeight;
     const spaceBelow = vpH - rect.bottom;
     const spaceAbove = rect.top;
     const desired = Math.min(320, panel.scrollHeight || 320);
+    flipUp = spaceBelow < desired + 16 && spaceAbove > spaceBelow;
+    panel.classList.toggle("cs-flip-up", flipUp);
+  }
+
+  function positionPanel() {
+    // Pin the panel to the host's viewport coordinates so it floats above
+    // every ancestor backdrop-filter / overflow / stacking context.
+    const rect = host.getBoundingClientRect();
+    const vpH = window.innerHeight;
 
     panel.style.position = "fixed";
     panel.style.left = `${rect.left}px`;
     panel.style.width = `${rect.width}px`;
     panel.style.right = "auto";
 
-    // Flip upward if there's clearly more room above (and not enough below).
-    if (spaceBelow < desired + 16 && spaceAbove > spaceBelow) {
+    if (flipUp) {
       panel.style.top = "auto";
       panel.style.bottom = `${vpH - rect.top + 8}px`;
-      panel.classList.add("cs-flip-up");
     } else {
       panel.style.top = `${rect.bottom + 8}px`;
       panel.style.bottom = "auto";
-      panel.classList.remove("cs-flip-up");
     }
   }
 
@@ -95,6 +103,7 @@ export function enhanceSelect(select) {
     panel.hidden = false;
     host.classList.add("cs-open");
     isOpen = true;
+    decideFlipDirection();
     positionPanel();
     // Focus the currently selected option for keyboard users.
     setTimeout(() => {
@@ -125,9 +134,20 @@ export function enhanceSelect(select) {
   // Allow other dropdowns to ask us to close (single-open enforcement).
   host.addEventListener("cs:force-close", close);
 
-  function onWindowChange() {
-    // Cheaper than reflowing on every scroll - just close.
-    close();
+  function onWindowChange(e) {
+    // Skip internal panel scrolling so the user can scroll through long
+    // option lists without us recomputing position uselessly.
+    if (e && e.target && panel.contains(e.target)) return;
+
+    // If the host has scrolled completely out of the viewport, close.
+    const rect = host.getBoundingClientRect();
+    const vpH = window.innerHeight;
+    if (rect.bottom < 0 || rect.top > vpH) {
+      close();
+      return;
+    }
+    // Otherwise stay open and follow the host.
+    positionPanel();
   }
 
   function onDocMousedown(e) {
