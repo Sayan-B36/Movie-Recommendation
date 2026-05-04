@@ -1034,6 +1034,32 @@ app.get("/api/collection/:id", async (req, res) => {
   }
 });
 
+/**
+ * Person profile + their full filmography (combined cast + crew credits
+ * across movies and TV). Used by the cast modal so users can click any
+ * actor / actress / director and see everything they've appeared in or
+ * directed.
+ */
+app.get("/api/person/:id", async (req, res) => {
+  const { id } = req.params;
+  if (!/^\d+$/.test(String(id))) {
+    return res.status(400).json({ error: "Person id must be numeric." });
+  }
+  try {
+    const [details, credits] = await Promise.all([
+      tmdbGet(`/person/${encodeURIComponent(id)}`, {}, DETAIL_TTL),
+      tmdbGet(
+        `/person/${encodeURIComponent(id)}/combined_credits`,
+        {},
+        DETAIL_TTL
+      )
+    ]);
+    res.json({ ...details, combined_credits: credits });
+  } catch (error) {
+    res.status(error.status || 500).json({ error: error.message });
+  }
+});
+
 app.get("/api/omdb", async (req, res) => {
   const imdbId = req.query.imdbId;
   if (!OMDB_KEY || !imdbId) return res.json(null);

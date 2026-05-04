@@ -1,5 +1,10 @@
 import { iconHtml, renderIcons } from "./icons.js";
-import { getCollection, getSeasonDetail, imageUrl } from "./api.js";
+import {
+  getCollection,
+  getPersonDetails,
+  getSeasonDetail,
+  imageUrl
+} from "./api.js";
 import {
   formatRuntime,
   getGenresText,
@@ -11,6 +16,7 @@ import {
 } from "./recommendations.js";
 
 const OVERVIEW_CLAMP = 280;
+const BIO_CLAMP = 420;
 
 let escListener = null;
 let currentItem = null;
@@ -18,6 +24,11 @@ let onSelectSimilarHandler = null;
 let openSeasonNum = null;
 let collectionPartsCache = [];
 const seasonCache = new Map(); // key: `${tvId}:${seasonNum}` -> season data
+const personCache = new Map(); // key: personId -> full person payload
+
+// Most-recent detail-modal context, used to drive the "Back" button
+// from the person modal back to the title detail it came from.
+let lastDetailContext = null; // { item, filters, onSelectSimilar }
 
 function close() {
   const root = document.getElementById("modal-root");
@@ -46,6 +57,8 @@ export function openDetailModal({ item, filters, onSelectSimilar }) {
   onSelectSimilarHandler = onSelectSimilar;
   openSeasonNum = null;
   collectionPartsCache = [];
+  // Remember context so the person modal's "Back" button can return.
+  lastDetailContext = { item, filters, onSelectSimilar };
 
   const title = getTitle(item);
   const backdrop = imageUrl(item.backdrop_path || item.detail?.backdrop_path, "w1280");
@@ -214,7 +227,13 @@ export function openDetailModal({ item, filters, onSelectSimilar }) {
                       .join("")
                       .toUpperCase();
                     return `
-                  <div class="cast-card">
+                  <button
+                    type="button"
+                    class="cast-card"
+                    data-person-id="${escapeHtml(p.id)}"
+                    data-person-role="${escapeHtml(p.role)}"
+                    title="See ${escapeHtml(p.name || "this person")}'s filmography"
+                  >
                     <div class="cast-avatar">
                       ${
                         avatar
@@ -224,7 +243,7 @@ export function openDetailModal({ item, filters, onSelectSimilar }) {
                     </div>
                     <strong>${escapeHtml(p.name || "Unknown")}</strong>
                     <span class="cast-role">${escapeHtml(p.role)}</span>
-                  </div>`;
+                  </button>`;
                   })
                   .join("")}
               </div>
@@ -330,6 +349,16 @@ export function openDetailModal({ item, filters, onSelectSimilar }) {
     if (similarItem && onSelectSimilarHandler) {
       onSelectSimilarHandler(normalizeResult(similarItem, fromMedia));
     }
+  });
+
+  // Cast / crew avatar clicks - open the person filmography modal.
+  root.addEventListener("click", (e) => {
+    const btn = e.target.closest(".cast-card[data-person-id]");
+    if (!btn || !root.contains(btn)) return;
+    const personId = btn.dataset.personId;
+    const role = btn.dataset.personRole || "";
+    if (!personId) return;
+    openPersonModal({ personId, role });
   });
 
   // View More / Less toggle for the overview text
@@ -547,6 +576,381 @@ async function toggleSeason(tvId, seasonNum, filters) {
   renderIcons(panel);
   // Smoothly scroll the panel into view
   panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+
+/* ========================================================================
+   Person modal — clicking any cast/crew avatar opens this view, showing
+   the person's profile photo, biography, and full filmography (acting +
+   directing). Each filmography card is clickable and opens that title's
+   detail modal. A "Back" button restores the title detail the user came
+   from.
+   ====================================================================== */
+
+/**
+ * Open the person filmography modal.
+ *
+ * @param {{ personId: string|number, role?: string }} args
+ *   personId  — TMDB person id
+ *   role      — the role label that was clicked (e.g. "Director", "as Carl")
+ *               used only to pick which filmography tab to highlight
+ *               first ("Directing" vs "Acting").
+ */
+async function openPersonModal({ personId, role }) {
+  const root = document.getElementById("modal-root");
+  if (!root) return;
+  const returnCtx = lastDetailContext;
+  // Render a skeleton so the UI feels instant while we fetch.
+  root.innerHTML = personSkeletonHtml();
+  document.body.classList.add("modal-open");
+  renderIcons(root);
+  wirePersonChrome(root, returnCtx);
+
+  // Fetch (with in-memory cache).
+  let person = personCache.get(String(personId));
+  if (!person) {
+    try {
+      person = await getPersonDetails(personId);
+      personCache.set(String(personId), person);
+    } catch (err) {
+      const skel = root.querySelector(".person-modal");
+      if (skel) {
+        skel.innerHTML = `
+          <button class="modal-close" type="button" data-action="close" title="Close">
+            ${iconHtml("X", 20)}
+          </button>
+          <div class="person-error">
+            ${iconHtml("AlertTriangle", 18)}
+            <span>Could not load this person (${escapeHtml(err.message || "error")}).</span>
+          </div>
+        `;
+        renderIcons(skel);
+        wirePersonChrome(root, returnCtx);
+      }
+      return;
+    }
+  }
+
+  // If the user closed/navigated away meanwhile, abort.
+  if (!document.body.classList.contains("modal-open")) return;
+
+  root.innerHTML = personModalHtml(person, role);
+  renderIcons(root);
+  wirePersonChrome(root, returnCtx);
+  wirePersonFilmography(root, person, returnCtx);
+}
+
+function personSkeletonHtml() {
+  return `
+    <div class="modal-backdrop" data-role="backdrop">
+      <article class="person-modal">
+        <button class="modal-close" type="button" data-action="close" title="Close">
+          ${iconHtml("X", 20)}
+        </button>
+        <div class="person-loading">
+          ${iconHtml("Loader", 18)}
+          <span>Loading filmography...</span>
+        </div>
+      </article>
+    </div>
+  `;
+}
+
+function personModalHtml(person, clickedRole) {
+  const name = person.name || "Unknown";
+  const photo = person.profile_path
+    ? imageUrl(person.profile_path, "w342")
+    : "";
+  const initials = name
+    .split(/\s+/)
+    .map((p) => p[0])
+    .filter(Boolean)
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
+
+  const known = person.known_for_department || "";
+  const birthday = (person.birthday || "").slice(0, 10);
+  const deathday = (person.deathday || "").slice(0, 10);
+  const placeOfBirth = person.place_of_birth || "";
+  const fullBio = person.biography || "";
+  const bioIsLong = fullBio.length > BIO_CLAMP;
+  const shortBio = bioIsLong
+    ? fullBio.slice(0, BIO_CLAMP).trimEnd() + "..."
+    : fullBio;
+
+  // Build filmography groups
+  const credits = person.combined_credits || {};
+  const cast = (credits.cast || []).slice();
+  const crew = (credits.crew || []).slice();
+
+  // Acting credits — dedupe by media id (a person can be billed multiple
+  // times in one show / various episodes, especially for TV).
+  const actingMap = new Map();
+  cast.forEach((c) => {
+    const key = `${c.media_type}:${c.id}`;
+    if (!actingMap.has(key) || (c.episode_count || 0) > (actingMap.get(key).episode_count || 0)) {
+      actingMap.set(key, c);
+    }
+  });
+  const acting = Array.from(actingMap.values());
+
+  // Directing credits
+  const directing = crew.filter((c) => c.job === "Director");
+  const directingMap = new Map();
+  directing.forEach((c) => directingMap.set(`${c.media_type}:${c.id}`, c));
+  const directed = Array.from(directingMap.values());
+
+  // Other notable crew work (Writer, Producer, Creator, etc.)
+  const otherCrewMap = new Map();
+  crew
+    .filter((c) => c.job !== "Director")
+    .forEach((c) => {
+      const key = `${c.media_type}:${c.id}`;
+      if (!otherCrewMap.has(key)) otherCrewMap.set(key, c);
+    });
+  const otherCrew = Array.from(otherCrewMap.values());
+
+  // Sort newest first within each group
+  const sortByDate = (a, b) => {
+    const ad = a.release_date || a.first_air_date || "";
+    const bd = b.release_date || b.first_air_date || "";
+    return bd.localeCompare(ad);
+  };
+  acting.sort(sortByDate);
+  directed.sort(sortByDate);
+  otherCrew.sort(sortByDate);
+
+  // Decide which section is opened first based on the role the user clicked
+  // ("Director" → directing first; otherwise acting first).
+  const directingFirst = /director/i.test(clickedRole || "") || known === "Directing";
+
+  const sections = [];
+  if (directingFirst) {
+    if (directed.length) sections.push(filmographySection("Directed", "Clapperboard", directed));
+    if (acting.length) sections.push(filmographySection("Acting", "Users", acting));
+  } else {
+    if (acting.length) sections.push(filmographySection("Acting", "Users", acting));
+    if (directed.length) sections.push(filmographySection("Directed", "Clapperboard", directed));
+  }
+  if (otherCrew.length) {
+    sections.push(filmographySection("Other work", "Wrench", otherCrew, /* showJob */ true));
+  }
+
+  const totalCount = acting.length + directed.length + otherCrew.length;
+
+  return `
+    <div class="modal-backdrop" data-role="backdrop">
+      <article class="person-modal">
+        <button class="modal-close" type="button" data-action="close" title="Close">
+          ${iconHtml("X", 20)}
+        </button>
+
+        <div class="person-hero">
+          ${
+            lastDetailContext
+              ? `<button type="button" class="person-back" data-action="back">
+                  ${iconHtml("ArrowLeft", 16)} Back to ${escapeHtml(getTitle(lastDetailContext.item))}
+                </button>`
+              : ""
+          }
+          <div class="person-hero-grid">
+            <div class="person-photo">
+              ${
+                photo
+                  ? `<img src="${photo}" alt="${escapeHtml(name)}" />`
+                  : `<span class="person-photo-fallback">${escapeHtml(initials || "?")}</span>`
+              }
+            </div>
+            <div class="person-summary">
+              <span class="person-eyebrow">${iconHtml("UserRound", 14)} ${escapeHtml(known || "Person")}</span>
+              <h2>${escapeHtml(name)}</h2>
+              <div class="person-facts">
+                ${
+                  birthday
+                    ? `<span>${iconHtml("Cake", 13)} Born ${escapeHtml(birthday)}</span>`
+                    : ""
+                }
+                ${
+                  deathday
+                    ? `<span>${iconHtml("Flame", 13)} Died ${escapeHtml(deathday)}</span>`
+                    : ""
+                }
+                ${
+                  placeOfBirth
+                    ? `<span>${iconHtml("MapPin", 13)} ${escapeHtml(placeOfBirth)}</span>`
+                    : ""
+                }
+                <span>${iconHtml("Film", 13)} ${totalCount} credit${totalCount === 1 ? "" : "s"}</span>
+              </div>
+              ${
+                fullBio
+                  ? `<p class="person-bio" data-expanded="false" data-full="${escapeHtml(fullBio)}">
+                      <span class="bio-text">${escapeHtml(shortBio)}</span>
+                      ${
+                        bioIsLong
+                          ? `<button type="button" class="view-more-btn" data-action="toggle-bio">View More</button>`
+                          : ""
+                      }
+                    </p>`
+                  : ""
+              }
+            </div>
+          </div>
+        </div>
+
+        <div class="person-body">
+          ${
+            sections.length
+              ? sections.join("")
+              : `<div class="person-empty">${iconHtml("Info", 16)} No public credits found for this person.</div>`
+          }
+        </div>
+      </article>
+    </div>
+  `;
+}
+
+/**
+ * Build one filmography section with a heading and a grid of clickable
+ * poster cards. `showJob` adds the crew job label below the year for the
+ * "Other work" section so the user knows whether it was Writer / Producer
+ * / etc.
+ */
+function filmographySection(heading, icon, items, showJob = false) {
+  return `
+    <section class="filmography-section">
+      <div class="section-minihead">
+        ${iconHtml(icon, 16)} ${escapeHtml(heading)}
+        <span class="filmography-count">${items.length}</span>
+      </div>
+      <div class="filmography-grid">
+        ${items
+          .map((it) => {
+            const t = it.title || it.name || "Untitled";
+            const year =
+              (it.release_date || it.first_air_date || "").slice(0, 4) || "—";
+            const poster = it.poster_path
+              ? imageUrl(it.poster_path, "w342")
+              : "";
+            const sub = showJob
+              ? `${escapeHtml(it.job || "Crew")} / ${escapeHtml(year)}`
+              : it.character
+              ? `as ${escapeHtml(it.character)}`
+              : escapeHtml(year);
+            const mediaBadge =
+              it.media_type === "tv" ? "TV" : "Movie";
+            return `
+              <button
+                type="button"
+                class="filmography-card"
+                data-media-id="${escapeHtml(it.id)}"
+                data-media-type="${escapeHtml(it.media_type || "movie")}"
+                title="${escapeHtml(t)}"
+              >
+                <div class="filmography-poster">
+                  ${
+                    poster
+                      ? `<img src="${poster}" alt="${escapeHtml(t)} poster" loading="lazy" />`
+                      : `<span class="filmography-poster-fallback">${iconHtml(
+                          it.media_type === "tv" ? "Tv" : "Film",
+                          22
+                        )}</span>`
+                  }
+                  <span class="filmography-media-badge">${mediaBadge}</span>
+                  ${
+                    year && year !== "—"
+                      ? `<span class="filmography-year-badge">${escapeHtml(year)}</span>`
+                      : ""
+                  }
+                </div>
+                <strong>${escapeHtml(t)}</strong>
+                <span class="filmography-sub">${sub}</span>
+              </button>
+            `;
+          })
+          .join("")}
+      </div>
+    </section>
+  `;
+}
+
+/**
+ * Wire the close button, backdrop click, ESC key, and the "Back to ..."
+ * button. Called for both the loading skeleton and the loaded view.
+ */
+function wirePersonChrome(root, returnCtx) {
+  root.querySelector("[data-action='close']")?.addEventListener("click", close);
+  root.querySelector("[data-role='backdrop']")?.addEventListener("mousedown", (e) => {
+    if (e.target === e.currentTarget) close();
+  });
+  // Reuse the same ESC listener flow used by the detail modal: ensure
+  // exactly one listener is bound at a time.
+  if (escListener) {
+    window.removeEventListener("keydown", escListener);
+  }
+  escListener = (e) => {
+    if (e.key === "Escape") close();
+  };
+  window.addEventListener("keydown", escListener);
+
+  const backBtn = root.querySelector("[data-action='back']");
+  if (backBtn && returnCtx) {
+    backBtn.addEventListener("click", () => {
+      openDetailModal(returnCtx);
+    });
+  }
+
+  // View More / Less toggle for the biography
+  const bioBtn = root.querySelector("[data-action='toggle-bio']");
+  if (bioBtn) {
+    bioBtn.addEventListener("click", () => {
+      const p = bioBtn.closest(".person-bio");
+      const textEl = p?.querySelector(".bio-text");
+      if (!p || !textEl) return;
+      const expanded = p.dataset.expanded === "true";
+      const full = p.dataset.full || textEl.textContent;
+      if (expanded) {
+        textEl.textContent =
+          full.length > BIO_CLAMP ? full.slice(0, BIO_CLAMP).trimEnd() + "..." : full;
+        bioBtn.textContent = "View More";
+        p.dataset.expanded = "false";
+      } else {
+        textEl.textContent = full;
+        bioBtn.textContent = "View Less";
+        p.dataset.expanded = "true";
+      }
+    });
+  }
+}
+
+/**
+ * Wire clicks on filmography cards so they open that title's detail
+ * modal via the originating `onSelectSimilar` callback (which is wired
+ * to main.js's openModal -> getMediaDetails -> openDetailModal pipeline).
+ */
+function wirePersonFilmography(root, person, returnCtx) {
+  root.addEventListener("click", (e) => {
+    const card = e.target.closest(".filmography-card[data-media-id]");
+    if (!card || !root.contains(card)) return;
+    const id = Number(card.dataset.mediaId);
+    const mediaType = card.dataset.mediaType || "movie";
+    if (!id) return;
+    // Find the original credit entry (so we can normalize via recommendations.js).
+    const credits = person.combined_credits || {};
+    const all = [].concat(credits.cast || [], credits.crew || []);
+    const raw = all.find(
+      (c) => Number(c.id) === id && (c.media_type || "movie") === mediaType
+    );
+    if (!raw) return;
+    const normalized = normalizeResult(raw, mediaType);
+    // Reuse the title-detail open pipeline. If the user originally came
+    // from a detail modal, re-use the same onSelectSimilar callback
+    // (= main.js openModal) so opening this title fetches details
+    // and rewires everything correctly.
+    if (returnCtx?.onSelectSimilar) {
+      returnCtx.onSelectSimilar(normalized);
+    }
+  });
 }
 
 export { close as closeDetailModal };

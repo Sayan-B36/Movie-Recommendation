@@ -91,6 +91,21 @@ export async function getRecommendations(mediaType, id, page = 1) {
   return r.json();
 }
 
+/**
+ * Fetch a person's profile + their combined cast/crew filmography
+ * (movies + TV). Used by the cast modal when a user clicks an
+ * actor / actress / director avatar.
+ */
+export async function getPersonDetails(personId) {
+  if (!personId) throw new Error("Person id required.");
+  const r = await fetch(`/api/person/${encodeURIComponent(personId)}`);
+  if (!r.ok) {
+    const data = await r.json().catch(() => ({}));
+    throw new Error(data.error || `Person details failed (${r.status}).`);
+  }
+  return r.json();
+}
+
 export async function getOmdbTitle(imdbId) {
   if (!imdbId) return null;
   const url = new URL("/api/omdb", window.location.origin);
