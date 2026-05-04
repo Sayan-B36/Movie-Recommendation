@@ -51,6 +51,21 @@ function escapeHtml(value) {
     .replace(/'/g, "&#39;");
 }
 
+function isDirectorRole(role) {
+  return /\bdirector\b/i.test(role || "");
+}
+
+function getCreditMode(role, explicitMode = "") {
+  if (explicitMode === "acting" || explicitMode === "directing") return explicitMode;
+  return isDirectorRole(role) ? "directing" : "acting";
+}
+
+function getCreditModeText(mode, count) {
+  const singular = Number(count) === 1;
+  if (mode === "directing") return singular ? "directed title" : "directed titles";
+  return singular ? "acting credit" : "acting credits";
+}
+
 export function openDetailModal({ item, filters, onSelectSimilar }) {
   if (currentItem) close();
   currentItem = item;
@@ -69,7 +84,7 @@ export function openDetailModal({ item, filters, onSelectSimilar }) {
   const directors = (credits.crew || [])
     .filter((c) => c.job === "Director")
     .slice(0, 2)
-    .map((c) => ({ ...c, role: "Director" }));
+    .map((c) => ({ ...c, role: "Director", creditMode: "directing" }));
   // For TV shows, TMDB exposes creators on the detail itself, not in credits.crew.
   const creators =
     item.media_type === "tv"
@@ -82,7 +97,8 @@ export function openDetailModal({ item, filters, onSelectSimilar }) {
       : [];
   const topCast = (credits.cast || []).slice(0, 10).map((c) => ({
     ...c,
-    role: c.character ? `as ${c.character}` : "Cast"
+    role: c.character ? `as ${c.character}` : "Cast",
+    creditMode: "acting"
   }));
   const people = [...directors, ...creators, ...topCast].slice(0, 12);
 
@@ -226,13 +242,17 @@ export function openDetailModal({ item, filters, onSelectSimilar }) {
                       .slice(0, 2)
                       .join("")
                       .toUpperCase();
+                    const creditMode = getCreditMode(p.role, p.creditMode);
+                    const creditText = getCreditModeText(creditMode);
                     return `
                   <button
                     type="button"
                     class="cast-card"
                     data-person-id="${escapeHtml(p.id)}"
                     data-person-role="${escapeHtml(p.role)}"
-                    title="See ${escapeHtml(p.name || "this person")}'s filmography"
+                    data-person-credit-mode="${escapeHtml(p.creditMode || "")}"
+                    aria-label="See ${escapeHtml(p.name || "this person")}'s ${escapeHtml(creditText)}"
+                    title="See ${escapeHtml(p.name || "this person")}'s ${escapeHtml(creditText)}"
                   >
                     <div class="cast-avatar">
                       ${
@@ -357,8 +377,9 @@ export function openDetailModal({ item, filters, onSelectSimilar }) {
     if (!btn || !root.contains(btn)) return;
     const personId = btn.dataset.personId;
     const role = btn.dataset.personRole || "";
+    const creditMode = btn.dataset.personCreditMode || "";
     if (!personId) return;
-    openPersonModal({ personId, role });
+    openPersonModal({ personId, role, creditMode });
   });
 
   // View More / Less toggle for the overview text
@@ -579,23 +600,22 @@ async function toggleSeason(tvId, seasonNum, filters) {
 }
 
 /* ========================================================================
-   Person modal — clicking any cast/crew avatar opens this view, showing
-   the person's profile photo, biography, and full filmography (acting +
-   directing). Each filmography card is clickable and opens that title's
-   detail modal. A "Back" button restores the title detail the user came
-   from.
+   Person modal - clicking a cast/crew avatar opens this view, showing the
+   person's profile and the credits for the role that was clicked. Each
+   filmography card opens that title's detail modal. A "Back" button restores
+   the title detail the user came from.
    ====================================================================== */
 
 /**
  * Open the person filmography modal.
  *
- * @param {{ personId: string|number, role?: string }} args
- *   personId  — TMDB person id
- *   role      — the role label that was clicked (e.g. "Director", "as Carl")
- *               used only to pick which filmography tab to highlight
- *               first ("Directing" vs "Acting").
+ * @param {{ personId: string|number, role?: string, creditMode?: string }} args
+ *   personId  - TMDB person id
+ *   role      - the role label that was clicked (e.g. "Director", "as Carl")
+ *               used to decide whether to show directing or acting credits.
+ *   creditMode - explicit "acting" or "directing" mode from the clicked card.
  */
-async function openPersonModal({ personId, role }) {
+async function openPersonModal({ personId, role, creditMode }) {
   const root = document.getElementById("modal-root");
   if (!root) return;
   const returnCtx = lastDetailContext;
@@ -633,7 +653,7 @@ async function openPersonModal({ personId, role }) {
   // If the user closed/navigated away meanwhile, abort.
   if (!document.body.classList.contains("modal-open")) return;
 
-  root.innerHTML = personModalHtml(person, role);
+  root.innerHTML = personModalHtml(person, role, creditMode);
   renderIcons(root);
   wirePersonChrome(root, returnCtx);
   wirePersonFilmography(root, person, returnCtx);
@@ -655,7 +675,7 @@ function personSkeletonHtml() {
   `;
 }
 
-function personModalHtml(person, clickedRole) {
+function personModalHtml(person, clickedRole, clickedCreditMode) {
   const name = person.name || "Unknown";
   const photo = person.profile_path
     ? imageUrl(person.profile_path, "w342")
@@ -678,12 +698,12 @@ function personModalHtml(person, clickedRole) {
     ? fullBio.slice(0, BIO_CLAMP).trimEnd() + "..."
     : fullBio;
 
-  // Build filmography groups
+  // Build filmography groups for the clicked role only.
   const credits = person.combined_credits || {};
   const cast = (credits.cast || []).slice();
   const crew = (credits.crew || []).slice();
 
-  // Acting credits — dedupe by media id (a person can be billed multiple
+  // Acting credits - dedupe by media id (a person can be billed multiple
   // times in one show / various episodes, especially for TV).
   const actingMap = new Map();
   cast.forEach((c) => {
@@ -697,18 +717,14 @@ function personModalHtml(person, clickedRole) {
   // Directing credits
   const directing = crew.filter((c) => c.job === "Director");
   const directingMap = new Map();
-  directing.forEach((c) => directingMap.set(`${c.media_type}:${c.id}`, c));
+  directing.forEach((c) => {
+    const key = `${c.media_type}:${c.id}`;
+    const existing = directingMap.get(key);
+    if (!existing || (c.episode_count || 0) > (existing.episode_count || 0)) {
+      directingMap.set(key, c);
+    }
+  });
   const directed = Array.from(directingMap.values());
-
-  // Other notable crew work (Writer, Producer, Creator, etc.)
-  const otherCrewMap = new Map();
-  crew
-    .filter((c) => c.job !== "Director")
-    .forEach((c) => {
-      const key = `${c.media_type}:${c.id}`;
-      if (!otherCrewMap.has(key)) otherCrewMap.set(key, c);
-    });
-  const otherCrew = Array.from(otherCrewMap.values());
 
   // Sort newest first within each group
   const sortByDate = (a, b) => {
@@ -718,25 +734,14 @@ function personModalHtml(person, clickedRole) {
   };
   acting.sort(sortByDate);
   directed.sort(sortByDate);
-  otherCrew.sort(sortByDate);
 
-  // Decide which section is opened first based on the role the user clicked
-  // ("Director" → directing first; otherwise acting first).
-  const directingFirst = /director/i.test(clickedRole || "") || known === "Directing";
-
-  const sections = [];
-  if (directingFirst) {
-    if (directed.length) sections.push(filmographySection("Directed", "Clapperboard", directed));
-    if (acting.length) sections.push(filmographySection("Acting", "Users", acting));
-  } else {
-    if (acting.length) sections.push(filmographySection("Acting", "Users", acting));
-    if (directed.length) sections.push(filmographySection("Directed", "Clapperboard", directed));
-  }
-  if (otherCrew.length) {
-    sections.push(filmographySection("Other work", "Wrench", otherCrew, /* showJob */ true));
-  }
-
-  const totalCount = acting.length + directed.length + otherCrew.length;
+  // Director clicks show directed titles; cast clicks show acting credits.
+  const creditMode = getCreditMode(clickedRole, clickedCreditMode);
+  const selectedItems = creditMode === "directing" ? directed : acting;
+  const sectionTitle = creditMode === "directing" ? "Directed" : "Acting";
+  const sectionIcon = creditMode === "directing" ? "Clapperboard" : "Users";
+  const totalCount = selectedItems.length;
+  const creditLabel = getCreditModeText(creditMode, totalCount);
 
   return `
     <div class="modal-backdrop" data-role="backdrop">
@@ -780,7 +785,8 @@ function personModalHtml(person, clickedRole) {
                     ? `<span>${iconHtml("MapPin", 13)} ${escapeHtml(placeOfBirth)}</span>`
                     : ""
                 }
-                <span>${iconHtml("Film", 13)} ${totalCount} credit${totalCount === 1 ? "" : "s"}</span>
+                <span>${iconHtml("Film", 13)} ${totalCount} ${escapeHtml(creditLabel)}</span>
+                <span>${iconHtml(sectionIcon, 13)} Showing ${escapeHtml(sectionTitle.toLowerCase())}</span>
               </div>
               ${
                 fullBio
@@ -800,9 +806,9 @@ function personModalHtml(person, clickedRole) {
 
         <div class="person-body">
           ${
-            sections.length
-              ? sections.join("")
-              : `<div class="person-empty">${iconHtml("Info", 16)} No public credits found for this person.</div>`
+            selectedItems.length
+              ? filmographySection(sectionTitle, sectionIcon, selectedItems)
+              : `<div class="person-empty">${iconHtml("Info", 16)} No public ${escapeHtml(creditLabel)} found for this person.</div>`
           }
         </div>
       </article>
@@ -812,11 +818,9 @@ function personModalHtml(person, clickedRole) {
 
 /**
  * Build one filmography section with a heading and a grid of clickable
- * poster cards. `showJob` adds the crew job label below the year for the
- * "Other work" section so the user knows whether it was Writer / Producer
- * / etc.
+ * poster cards.
  */
-function filmographySection(heading, icon, items, showJob = false) {
+function filmographySection(heading, icon, items) {
   return `
     <section class="filmography-section">
       <div class="section-minihead">
@@ -828,15 +832,11 @@ function filmographySection(heading, icon, items, showJob = false) {
           .map((it) => {
             const t = it.title || it.name || "Untitled";
             const year =
-              (it.release_date || it.first_air_date || "").slice(0, 4) || "—";
+              (it.release_date || it.first_air_date || "").slice(0, 4) || "N/A";
             const poster = it.poster_path
               ? imageUrl(it.poster_path, "w342")
               : "";
-            const sub = showJob
-              ? `${escapeHtml(it.job || "Crew")} / ${escapeHtml(year)}`
-              : it.character
-              ? `as ${escapeHtml(it.character)}`
-              : escapeHtml(year);
+            const sub = it.character ? `as ${escapeHtml(it.character)}` : escapeHtml(year);
             const mediaBadge =
               it.media_type === "tv" ? "TV" : "Movie";
             return `
@@ -858,7 +858,7 @@ function filmographySection(heading, icon, items, showJob = false) {
                   }
                   <span class="filmography-media-badge">${mediaBadge}</span>
                   ${
-                    year && year !== "—"
+                    year && year !== "N/A"
                       ? `<span class="filmography-year-badge">${escapeHtml(year)}</span>`
                       : ""
                   }
