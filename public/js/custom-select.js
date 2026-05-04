@@ -54,18 +54,48 @@ export function enhanceSelect(select) {
     });
   }
 
+  function positionPanel() {
+    // Pin the panel to the host's viewport coordinates so it floats above
+    // every ancestor backdrop-filter / overflow / stacking context.
+    const rect = host.getBoundingClientRect();
+    const vpH = window.innerHeight;
+    const spaceBelow = vpH - rect.bottom;
+    const spaceAbove = rect.top;
+    const desired = Math.min(320, panel.scrollHeight || 320);
+
+    panel.style.position = "fixed";
+    panel.style.left = `${rect.left}px`;
+    panel.style.width = `${rect.width}px`;
+    panel.style.right = "auto";
+
+    // Flip upward if there's clearly more room above (and not enough below).
+    if (spaceBelow < desired + 16 && spaceAbove > spaceBelow) {
+      panel.style.top = "auto";
+      panel.style.bottom = `${vpH - rect.top + 8}px`;
+      panel.classList.add("cs-flip-up");
+    } else {
+      panel.style.top = `${rect.bottom + 8}px`;
+      panel.style.bottom = "auto";
+      panel.classList.remove("cs-flip-up");
+    }
+  }
+
   function open() {
     if (isOpen) return;
     // Close any other open dropdowns first - one at a time.
     document.querySelectorAll(".cs-host.cs-open").forEach((h) => {
-      if (h !== host) h.classList.remove("cs-open");
-      const p = h.querySelector(":scope > .cs-panel");
-      if (p && h !== host) p.hidden = true;
+      if (h !== host) {
+        const ev = new CustomEvent("cs:force-close");
+        h.dispatchEvent(ev);
+      }
     });
     buildPanel();
+    // Portal the panel onto <body> so no ancestor can clip or overlap it.
+    document.body.appendChild(panel);
     panel.hidden = false;
     host.classList.add("cs-open");
     isOpen = true;
+    positionPanel();
     // Focus the currently selected option for keyboard users.
     setTimeout(() => {
       const sel = panel.querySelector(".selected") || panel.querySelector(".cs-option");
@@ -73,6 +103,8 @@ export function enhanceSelect(select) {
     }, 0);
     document.addEventListener("mousedown", onDocMousedown, true);
     document.addEventListener("keydown", onKey, true);
+    window.addEventListener("scroll", onWindowChange, true);
+    window.addEventListener("resize", onWindowChange);
   }
 
   function close() {
@@ -80,12 +112,26 @@ export function enhanceSelect(select) {
     panel.hidden = true;
     host.classList.remove("cs-open");
     isOpen = false;
+    // Return panel to host so it gets cleaned up alongside future re-renders.
+    if (panel.parentElement === document.body) {
+      host.appendChild(panel);
+    }
     document.removeEventListener("mousedown", onDocMousedown, true);
     document.removeEventListener("keydown", onKey, true);
+    window.removeEventListener("scroll", onWindowChange, true);
+    window.removeEventListener("resize", onWindowChange);
+  }
+
+  // Allow other dropdowns to ask us to close (single-open enforcement).
+  host.addEventListener("cs:force-close", close);
+
+  function onWindowChange() {
+    // Cheaper than reflowing on every scroll - just close.
+    close();
   }
 
   function onDocMousedown(e) {
-    if (!host.contains(e.target)) close();
+    if (!host.contains(e.target) && !panel.contains(e.target)) close();
   }
 
   function onKey(e) {
